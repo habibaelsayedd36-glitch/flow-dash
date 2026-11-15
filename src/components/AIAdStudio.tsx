@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Download, ImagePlus, Loader2, Sparkles } from "lucide-react";
-import { Txt2ImgWorkerClient } from "web-txt2img";
 import { cutout } from "@/lib/image-engine";
 
 type Style = "luxury" | "minimal" | "nature" | "studio" | "lifestyle";
@@ -42,12 +41,14 @@ export function AIAdStudio() {
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [ready, setReady] = useState(false);
-  const clientRef = useRef<ReturnType<typeof Txt2ImgWorkerClient.createDefault> | null>(null);
+  const workerRef = useRef<Worker | null>(null);
+  const requestId = useRef(0);
   const originalUrl = useRef("");
 
   useEffect(() => () => {
     if (originalUrl.current) URL.revokeObjectURL(originalUrl.current);
-    void clientRef.current?.unload().catch(() => undefined);
+    workerRef.current?.terminate();
+    workerRef.current = null;
   }, []);
 
   const chooseFile = (next: File | null) => {
@@ -66,37 +67,36 @@ export function AIAdStudio() {
     setPreview((current) => { if (current) URL.revokeObjectURL(current); return ""; });
     setProgress(0);
     try {
-      const client = clientRef.current ?? Txt2ImgWorkerClient.createDefault();
-      clientRef.current = client;
-      if (!ready) {
-        setStatus("Checking your browser and GPU…");
-        const caps = await client.detect();
-        if (!caps.webgpu) throw new Error("This browser or graphics card does not support WebGPU. Use an updated Chrome or Edge browser with hardware acceleration enabled.");
-        setStatus("Downloading the free AI model (about 2.3 GB, first time only)…");
-        const loaded = await client.load("sd-turbo", { backendPreference: ["webgpu"] }, (p) => {
-          if (typeof p.pct === "number") setProgress(p.pct);
-          if (p.message) setStatus(p.message);
-        });
-        if (!loaded?.ok) throw new Error(loaded?.message || "The local image model could not be loaded.");
-        setReady(true);
-      }
-
-      setStatus("Creating a new advertising background with AI…");
+      setStatus(ready ? "Creating a new advertising background with AI…" : "Loading AI model and tokenizer…");
       const prompt = "Photorealistic premium commercial product photography background only, empty central foreground space reserved for a real product to be composited later. " +
         CATEGORIES[category] + ", " + STYLES[style] + ". " +
         (extra.trim() ? extra.trim() + ". " : "") +
         "Square composition, professional art direction, realistic materials, beautiful depth, crisp detail, balanced composition. " +
         "No product, no bottle, no package, no people, no text, no letters, no logo, no watermark.";
-      const task = client.generate({ prompt }, (p) => {
-        if (typeof p.pct === "number") setProgress(p.pct);
-        if (p.phase) setStatus("Generating scene: " + p.phase);
+      const worker = workerRef.current ?? new Worker(new URL("../workers/ai-ad.worker.ts", import.meta.url), { type: "module" });
+      workerRef.current = worker;
+      const id = ++requestId.current;
+      const generatedBlob = await new Promise<Blob>((resolve, reject) => {
+        const onMessage = (event: MessageEvent<{ id: number; type: string; pct?: number; message?: string; ok?: boolean; blob?: Blob }>) => {
+          const data = event.data;
+          if (data.id !== id) return;
+          if (data.type === "progress") {
+            if (typeof data.pct === "number") setProgress(data.pct);
+            if (data.message) setStatus(data.message);
+            return;
+          }
+          worker.removeEventListener("message", onMessage);
+          if (data.ok && data.blob) resolve(data.blob);
+          else reject(new Error(data.message || "AI background generation failed."));
+        };
+        worker.addEventListener("message", onMessage);
+        worker.postMessage({ id, prompt });
       });
-      const generated = await task.promise;
-      if (!generated.ok) throw new Error(generated.message || "AI background generation failed.");
+      setReady(true);
 
       setStatus("Placing your original product into the scene…");
       const [background, product] = await Promise.all([
-        createImageBitmap(generated.blob),
+        createImageBitmap(generatedBlob),
         cutout(file, 28),
       ]);
       if (!product.productPx) throw new Error("Could not detect the product. Try a clearer photo with the full product visible.");
