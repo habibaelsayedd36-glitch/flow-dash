@@ -141,6 +141,28 @@ export async function generateListingAction(_prev: FormState, fd: FormData): Pro
   redirect(target);
 }
 
+export type BulkGenerateResult = { ok: boolean; results: Array<{ productId: number; productName: string; listingId?: number; engine?: string; aiError?: string; error?: string }> };
+
+export async function bulkGenerateListingsAction(productIds: number[], marketplace: string): Promise<BulkGenerateResult> {
+  await ensureDb();
+  if (!isMarketplace(marketplace) || !Array.isArray(productIds)) return { ok: false, results: [] };
+  const ids = [...new Set(productIds.map((id) => int(id, 1, 2_000_000_000, 0)).filter(Boolean))].slice(0, 25);
+  if (!ids.length) return { ok: false, results: [] };
+  const rows = await db.select().from(products).where((await import("drizzle-orm")).inArray(products.id, ids));
+  const results: BulkGenerateResult["results"] = [];
+  for (const product of rows) {
+    try {
+      const made = await produceListing(product, { marketplace, tone: "clear" });
+      await emit("listing_generated", { productId: product.id, clientId: product.clientId, listingId: made.listingId, score: made.score });
+      results.push({ productId: product.id, productName: product.name, listingId: made.listingId, engine: made.engine, aiError: made.aiError ?? undefined });
+    } catch {
+      results.push({ productId: product.id, productName: product.name, error: "Generation failed" });
+    }
+  }
+  refresh();
+  return { ok: results.length > 0 && results.every((r) => !r.error), results };
+}
+
 export type RegenerateInput = { features: string; featuresAr: string; keywords: string; marketplace: string; tone: string; notes: string };
 export type RegenerateResult =
   | { ok: false }
