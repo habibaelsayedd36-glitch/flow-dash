@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, Loader2, Search, Sparkles, WandSparkles } from "lucide-react";
 import { bulkGenerateListingsAction, saveBrandVoiceAction } from "@/app/actions";
+import { askCommerceAssistantAction } from "@/app/actions-growth";
 import { MARKETPLACES, MARKETPLACE_META } from "@/lib/catalog";
 
 type Listing = { id: number; productName: string; clientName: string; marketplace: string; status: string; score: number; engine: string };
@@ -27,6 +28,10 @@ export function IntelligenceStudio({ listings, products, initialBrandVoice }: { 
   const [brandVoice, setBrandVoice] = useState(initialBrandVoice);
   const [saved, setSaved] = useState(false);
   const [savingVoice, setSavingVoice] = useState(false);
+  const [assistantQuestion, setAssistantQuestion] = useState("");
+  const [assistantAnswer, setAssistantAnswer] = useState("");
+  const [assistantError, setAssistantError] = useState("");
+  const [assistantPending, setAssistantPending] = useState(false);
   const [selectedProducts, setSelectedProducts] = useState<number[]>([]);
   const [bulkMarketplace, setBulkMarketplace] = useState("amazon");
   const [bulkResults, setBulkResults] = useState<Array<{ productId: number; productName: string; listingId?: number; engine?: string; aiError?: string; error?: string }> | null>(null);
@@ -49,6 +54,22 @@ export function IntelligenceStudio({ listings, products, initialBrandVoice }: { 
     const missing = theirs.filter((w) => !ours.has(w));
     return { total: theirs.length, shared, missing: missing.slice(0, 30) };
   }, [competitor, ownCopy]);
+
+  async function askAssistant() {
+    if (!assistantQuestion.trim() || assistantPending) return;
+    setAssistantPending(true);
+    setAssistantError("");
+    setAssistantAnswer("");
+    try {
+      const result = await askCommerceAssistantAction(assistantQuestion);
+      if (result.ok) setAssistantAnswer(result.answer ?? "");
+      else setAssistantError(result.error ?? "تعذر تنفيذ الطلب.");
+    } catch {
+      setAssistantError("حصل خطأ أثناء الاتصال. حاولي مرة تانية.");
+    } finally {
+      setAssistantPending(false);
+    }
+  }
 
   async function saveVoice() {
     if (!brandVoice.trim() || savingVoice) return;
@@ -144,6 +165,20 @@ export function IntelligenceStudio({ listings, products, initialBrandVoice }: { 
             {saved && <span className="inline-flex items-center gap-1 text-sm text-flow-green"><CheckCircle2 size={16} /> Saved in this browser</span>}
           </div>
         </div>
+      </section>
+
+      <section className="card p-5 sm:p-6">
+        <div className="flex items-center gap-2"><Sparkles size={18} /><h2 className="h-section">FLOW AI Assistant</h2></div>
+        <p className="mt-2 text-sm text-muted-foreground">اسألي عن حالة الشغل والأرقام المسجلة في الداش. المساعد بيستخدم Snapshot من بيانات FLOW، ومش بيدّعي إنه متصل Live بحسابات الـ Marketplaces.</p>
+        <form className="mt-4 space-y-3" onSubmit={(e) => { e.preventDefault(); void askAssistant(); }}>
+          <textarea className="field min-h-24" value={assistantQuestion} onChange={(e) => setAssistantQuestion(e.target.value)} placeholder="مثال: إيه أولويات الشغل عندنا بناءً على الداتا الموجودة؟" />
+          <button type="submit" className="btn btn-primary" disabled={!assistantQuestion.trim() || assistantPending}>
+            {assistantPending ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+            {assistantPending ? "Thinking…" : "Ask FLOW"}
+          </button>
+        </form>
+        {assistantError && <p role="alert" className="mt-3 text-sm text-danger">{assistantError}</p>}
+        {assistantAnswer && <div className="mt-4 whitespace-pre-wrap rounded-2xl bg-secondary/60 p-4 text-sm leading-relaxed">{assistantAnswer}</div>}
       </section>
 
       <section className="card overflow-hidden">
