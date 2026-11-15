@@ -6,7 +6,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { ensureDb } from "@/db/ensure";
-import { automations, clients, listings, products, tasks, type AutomationCondition, type AutomationConfig } from "@/db/schema";
+import { automations, clients, listings, products, settings, tasks, type AutomationCondition, type AutomationConfig } from "@/db/schema";
 import {
   ACTIONS,
   CATEGORIES,
@@ -139,6 +139,15 @@ export async function generateListingAction(_prev: FormState, fd: FormData): Pro
   }
   refresh();
   redirect(target);
+}
+
+export async function saveBrandVoiceAction(value: string): Promise<{ ok: boolean }> {
+  await ensureDb();
+  const cleanValue = String(value ?? "").trim().slice(0, 2000);
+  if (!cleanValue) return { ok: false };
+  await db.insert(settings).values({ key: "brand_voice", value: cleanValue }).onConflictDoUpdate({ target: settings.key, set: { value: cleanValue } });
+  refresh();
+  return { ok: true };
 }
 
 export type BulkGenerateResult = { ok: boolean; results: Array<{ productId: number; productName: string; listingId?: number; engine?: string; aiError?: string; error?: string }> };
