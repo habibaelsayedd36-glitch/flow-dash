@@ -1,15 +1,23 @@
-import Image from "next/image";
-
 /**
- * The Flow brand row exactly as the live dashboards use it: mark, wordmark and
- * a lime product pill ("Flow" for the team dashboard, "Space" for the client
- * portal). Assets are the originals from /assets/logo on flow-agency-eg.com.
+ * Original FLOW Agency logo assets served by the official website.
+ * Keep the mark and wordmark as image assets rather than recreating the logo.
  */
+const MARK = "https://www.flow-agency-eg.com/assets/logos/Symbol.png";
+const WORDMARK = "https://www.flow-agency-eg.com/assets/flow-wordmark-white.png";
+
 export function Brand({ tone = "green", product = "Flow" }: { tone?: "green" | "white"; product?: "Flow" | "Space" }) {
+  const greenFilter = "brightness(0) saturate(100%) invert(19%) sepia(22%) saturate(1184%) hue-rotate(91deg) brightness(93%) contrast(91%)";
   return (
     <span className="flex items-center gap-3">
-      <Image src={`/brand/flow-mark-${tone}.png`} alt="" width={36} height={36} priority className="size-9" />
-      <Image src={`/brand/flow-wordmark-${tone}.png`} alt="FLOW" width={60} height={24} priority className="h-6 w-[60px]" />
+      <img src={MARK} alt="" width={36} height={36} className="size-9 object-contain" />
+      <img
+        src={WORDMARK}
+        alt="FLOW"
+        width={60}
+        height={24}
+        className="h-6 w-[60px] object-contain"
+        style={tone === "green" ? { filter: greenFilter } : undefined}
+      />
       <span className="rounded-full bg-flow-lime px-3 py-1 font-display text-sm font-bold leading-5 text-flow-green">{product}</span>
     </span>
   );
