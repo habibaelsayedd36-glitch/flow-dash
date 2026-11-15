@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, Loader2, Search, Sparkles, WandSparkles } from "lucide-react";
-import { bulkGenerateListingsAction } from "@/app/actions";
+import { bulkGenerateListingsAction, saveBrandVoiceAction } from "@/app/actions";
 import { MARKETPLACES, MARKETPLACE_META } from "@/lib/catalog";
 
 type Listing = { id: number; productName: string; clientName: string; marketplace: string; status: string; score: number; engine: string };
@@ -21,11 +21,12 @@ const modules = [
   { title: "Keyword Research Studio", desc: "إدارة الكلمات المفتاحية ومراجعة تغطيتها وترتيبها المسجل.", href: "/keywords", tag: "SEO" },
 ];
 
-export function IntelligenceStudio({ listings, products }: { listings: Listing[]; products: Product[] }) {
+export function IntelligenceStudio({ listings, products, initialBrandVoice }: { listings: Listing[]; products: Product[]; initialBrandVoice: string }) {
   const [competitor, setCompetitor] = useState("");
   const [ownCopy, setOwnCopy] = useState("");
-  const [brandVoice, setBrandVoice] = useState("");
+  const [brandVoice, setBrandVoice] = useState(initialBrandVoice);
   const [saved, setSaved] = useState(false);
+  const [savingVoice, setSavingVoice] = useState(false);
   const [selectedProducts, setSelectedProducts] = useState<number[]>([]);
   const [bulkMarketplace, setBulkMarketplace] = useState("amazon");
   const [bulkResults, setBulkResults] = useState<Array<{ productId: number; productName: string; listingId?: number; engine?: string; aiError?: string; error?: string }> | null>(null);
@@ -49,11 +50,17 @@ export function IntelligenceStudio({ listings, products }: { listings: Listing[]
     return { total: theirs.length, shared, missing: missing.slice(0, 30) };
   }, [competitor, ownCopy]);
 
-  function loadVoice() {
-    try { setBrandVoice(window.localStorage.getItem("flow-brand-voice") ?? ""); } catch { /* storage may be unavailable */ }
-  }
-  function saveVoice() {
-    try { window.localStorage.setItem("flow-brand-voice", brandVoice); setSaved(true); } catch { setSaved(false); }
+  async function saveVoice() {
+    if (!brandVoice.trim() || savingVoice) return;
+    setSavingVoice(true);
+    try {
+      const result = await saveBrandVoiceAction(brandVoice);
+      setSaved(result.ok);
+    } catch {
+      setSaved(false);
+    } finally {
+      setSavingVoice(false);
+    }
   }
 
   return (
@@ -129,12 +136,11 @@ export function IntelligenceStudio({ listings, products }: { listings: Listing[]
 
         <div className="card p-5 sm:p-6">
           <div className="flex items-center gap-2"><WandSparkles size={18} /><h2 className="h-section">Brand Voice Profile</h2></div>
-          <p className="mt-2 text-sm text-muted-foreground">اكتبي قواعد نبرة البراند: رسمي أو ودود، كلمات ممنوعة، الجمهور المستهدف، وطريقة كتابة أسماء المنتجات. تُحفظ على هذا المتصفح فقط حاليًا.</p>
+          <p className="mt-2 text-sm text-muted-foreground">اكتبي قواعد نبرة البراند: رسمي أو ودود، كلمات ممنوعة، الجمهور المستهدف، وطريقة كتابة أسماء المنتجات. تُحفظ في قاعدة بيانات FLOW.</p>
           <label className="label mt-5" htmlFor="brand-voice">Brand voice instructions</label>
           <textarea id="brand-voice" className="field min-h-40" value={brandVoice} onChange={(e) => { setBrandVoice(e.target.value); setSaved(false); }} placeholder="Example: Clear, confident and helpful. Avoid exaggerated claims. Keep technical specifications exact…" />
           <div className="mt-4 flex flex-wrap gap-2">
-            <button type="button" className="btn btn-ghost" onClick={loadVoice}>Load saved profile</button>
-            <button type="button" className="btn btn-primary" onClick={saveVoice} disabled={!brandVoice.trim()}>Save profile</button>
+            <button type="button" className="btn btn-primary" onClick={saveVoice} disabled={!brandVoice.trim() || savingVoice}>{savingVoice ? "Saving…" : "Save profile"}</button>
             {saved && <span className="inline-flex items-center gap-1 text-sm text-flow-green"><CheckCircle2 size={16} /> Saved in this browser</span>}
           </div>
         </div>
