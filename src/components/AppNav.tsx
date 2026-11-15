@@ -2,6 +2,7 @@
 
 import {
   Boxes,
+  BrainCircuit,
   Camera,
   Eraser,
   FileSpreadsheet,
@@ -35,6 +36,12 @@ const GROUPS: { label: string | null; items: Item[] }[] = [
       { href: "/", label: "Overview", icon: LayoutDashboard },
       { href: "/studio", label: "AI Listing Studio", icon: Sparkles },
       { href: "/listings", label: "Listings", icon: FileText },
+    ],
+  },
+  {
+    label: "Intelligence",
+    items: [
+      { href: "/intelligence", label: "AI Commerce Intelligence", icon: BrainCircuit },
     ],
   },
   {
