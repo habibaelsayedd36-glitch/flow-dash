@@ -1,8 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { ArrowRight, CheckCircle2, Copy, Search, Sparkles, WandSparkles } from "lucide-react";
+import { ArrowRight, CheckCircle2, Loader2, Search, Sparkles, WandSparkles } from "lucide-react";
+import { bulkGenerateListingsAction } from "@/app/actions";
+import { MARKETPLACES, MARKETPLACE_META } from "@/lib/catalog";
 
 type Listing = { id: number; productName: string; clientName: string; marketplace: string; status: string; score: number; engine: string };
 type Product = { id: number; name: string; sku: string; marketplace: string; stage: string; clientName: string; listingId: number | null };
@@ -24,6 +26,19 @@ export function IntelligenceStudio({ listings, products }: { listings: Listing[]
   const [ownCopy, setOwnCopy] = useState("");
   const [brandVoice, setBrandVoice] = useState("");
   const [saved, setSaved] = useState(false);
+  const [selectedProducts, setSelectedProducts] = useState<number[]>([]);
+  const [bulkMarketplace, setBulkMarketplace] = useState("amazon");
+  const [bulkResults, setBulkResults] = useState<Array<{ productId: number; productName: string; listingId?: number; engine?: string; aiError?: string; error?: string }> | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function runBulkGeneration() {
+    if (!selectedProducts.length || pending) return;
+    startTransition(async () => {
+      const result = await bulkGenerateListingsAction(selectedProducts, bulkMarketplace);
+      setBulkResults(result.results);
+      setSelectedProducts([]);
+    });
+  }
 
   const comparison = useMemo(() => {
     const words = (s: string) => Array.from(new Set((s.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).filter((w) => w.length > 3)));
@@ -52,6 +67,46 @@ export function IntelligenceStudio({ listings, products }: { listings: Listing[]
             <span className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-flow-green">Open module <ArrowRight size={15} /></span>
           </Link>
         ))}
+      </section>
+
+      <section className="card overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-5">
+          <div><h2 className="h-section">Bulk AI Listing Generation</h2><p className="mt-1 text-sm text-muted-foreground">اختاري حتى 25 منتجًا في كل دفعة لإنشاء Listing لكل منتج باستخدام مزود الذكاء الاصطناعي المتصل. أي fallback إلى template سيظهر بوضوح.</p></div>
+          <span className="pill pill-mute">{selectedProducts.length}/25 selected</span>
+        </div>
+        <div className="flex flex-wrap items-end gap-3 p-5">
+          <div className="min-w-48 flex-1">
+            <label className="label" htmlFor="bulk-marketplace">Target marketplace</label>
+            <select id="bulk-marketplace" className="field" value={bulkMarketplace} onChange={(e) => setBulkMarketplace(e.target.value)}>
+              {MARKETPLACES.map((m) => <option key={m} value={m}>{MARKETPLACE_META[m].label}</option>)}
+            </select>
+          </div>
+          <button type="button" className="btn btn-primary" disabled={!selectedProducts.length || pending} onClick={runBulkGeneration}>
+            {pending ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+            {pending ? "Generating…" : "Generate selected listings"}
+          </button>
+          <button type="button" className="btn btn-ghost" disabled={!selectedProducts.length || pending} onClick={() => setSelectedProducts([])}>Clear selection</button>
+        </div>
+        <div className="max-h-80 divide-y divide-border overflow-y-auto">
+          {products.length ? products.slice(0, 100).map((p) => {
+            const checked = selectedProducts.includes(p.id);
+            const disabled = !checked && selectedProducts.length >= 25;
+            return <label key={p.id} className="flex cursor-pointer items-center gap-3 px-5 py-3 hover:bg-muted">
+              <input type="checkbox" checked={checked} disabled={disabled || pending} onChange={(e) => setSelectedProducts((old) => e.target.checked ? [...old, p.id] : old.filter((id) => id !== p.id))} />
+              <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{p.name}</span><span className="block text-xs text-muted-foreground">{p.clientName} · {p.sku || "No SKU"}</span></span>
+              <span className="pill pill-mute">{p.stage}</span>
+            </label>;
+          }) : <p className="p-5 text-sm text-muted-foreground">Add products to the catalog first.</p>}
+        </div>
+        {bulkResults && <div className="border-t border-border p-5">
+          <p className="mb-3 text-sm font-semibold">Latest batch results</p>
+          <div className="space-y-2">{bulkResults.map((r) => <div key={r.productId} className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="min-w-0 flex-1 truncate">{r.productName}</span>
+            {r.error ? <span className="pill pill-bad">Failed</span> : r.engine === "ai" ? <span className="pill pill-ok">AI generated</span> : <span className="pill pill-warn">Template fallback</span>}
+            {r.listingId && <Link href={`/listings/${r.listingId}`} className="font-medium text-flow-green hover:underline">Review</Link>}
+            {r.aiError && <span className="w-full text-xs text-amber-700">{r.aiError}</span>}
+          </div>)}</div>
+        </div>}
       </section>
 
       <section className="grid gap-5 xl:grid-cols-2">
