@@ -1,0 +1,3 @@
+order id,date,sku,item,quantity,line total,status
+ORD-2001,2026-11-03,DL-CH-30,USB-C Wall Charger 30W,2,598,Shipped
+ORD-2002,2026-11-04,DL-CBL-1M,USB-C Cable 1m,1,99,Delivered

@@ -1,0 +1,320 @@
+"use server";
+
+import { eq } from "drizzle-orm";
+import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { db } from "@/db";
+import { ensureDb } from "@/db/ensure";
+import { automations, clients, listings, products, tasks, type AutomationCondition, type AutomationConfig } from "@/db/schema";
+import {
+  ACTIONS,
+  CATEGORIES,
+  CLIENT_STATUSES,
+  LISTING_STATUSES,
+  PLANS,
+  STAGES,
+  TASK_KINDS,
+  TEAMS,
+  TONES,
+  TRIGGERS,
+  isMarketplace,
+  isStage,
+  type PlanId,
+} from "@/lib/catalog";
+import { briefOf, checkQuota, emit, moveProductStage, produceListing, runScheduledChecks, type RunResult } from "@/lib/engine";
+import { LOCALE_COOKIE } from "@/lib/locale";
+import { scoreListing, type ListingContent } from "@/lib/rules";
+
+export type FormState = { ok?: boolean; error?: "required" | "market" | "failed"; ran?: number };
+
+const str = (fd: FormData, key: string, max = 200) => String(fd.get(key) ?? "").trim().slice(0, max);
+const int = (v: unknown, min: number, max: number, fallback: number) => {
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
+};
+const oneOf = <T extends string>(list: readonly T[], v: string, fallback: T): T =>
+  (list as readonly string[]).includes(v) ? (v as T) : fallback;
+const fired = (results: RunResult[]) => results.filter((r) => r.status === "success").length;
+const refresh = () => revalidatePath("/", "layout");
+
+export async function setLocaleAction(locale: "ar" | "en") {
+  const store = await cookies();
+  store.set(LOCALE_COOKIE, locale === "en" ? "en" : "ar", { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax" });
+  refresh();
+}
+
+// ------------------------------------------------------------------ clients
+
+export async function createClientAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  await ensureDb();
+  const name = str(fd, "name", 80);
+  if (!name) return { error: "required" };
+  const markets = fd.getAll("marketplaces").map(String).filter(isMarketplace);
+  if (markets.length === 0) return { error: "market" };
+  const planId = oneOf(Object.keys(PLANS) as PlanId[], str(fd, "plan"), "starter");
+  const plan = PLANS[planId];
+  try {
+    await db.insert(clients).values({
+      name,
+      contactName: str(fd, "contact", 80),
+      phone: str(fd, "phone", 30),
+      plan: planId,
+      marketplaces: markets,
+      quota: plan.quota,
+      monthlyFee: plan.fee,
+      commissionPct: plan.pct,
+      status: oneOf(CLIENT_STATUSES, str(fd, "status"), "active"),
+    });
+  } catch {
+    return { error: "failed" };
+  }
+  refresh();
+  return { ok: true };
+}
+
+// ----------------------------------------------------------------- products
+
+export async function createProductAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  await ensureDb();
+  const name = str(fd, "name", 160);
+  const clientId = int(fd.get("clientId"), 1, 2_000_000_000, 0);
+  if (!name || !clientId) return { error: "required" };
+  const [client] = await db.select().from(clients).where(eq(clients.id, clientId));
+  if (!client) return { error: "failed" };
+  const marketplace = str(fd, "marketplace");
+  try {
+    const [row] = await db
+      .insert(products)
+      .values({
+        clientId,
+        name,
+        nameAr: str(fd, "nameAr", 160),
+        brand: str(fd, "brand", 80) || client.name,
+        sku: str(fd, "sku", 40),
+        category: oneOf(CATEGORIES, str(fd, "category"), "home"),
+        marketplace: isMarketplace(marketplace) ? marketplace : "amazon",
+        features: str(fd, "features", 2000),
+        featuresAr: str(fd, "featuresAr", 2000),
+        keywords: str(fd, "keywords", 500),
+      })
+      .returning({ id: products.id });
+    const results = [
+      ...(await emit("product_created", { productId: row.id, clientId })),
+      ...(await checkQuota(clientId)),
+    ];
+    refresh();
+    return { ok: true, ran: fired(results) };
+  } catch {
+    return { error: "failed" };
+  }
+}
+
+export async function moveProductAction(productId: number, stage: string): Promise<{ ok: boolean; ran: number }> {
+  await ensureDb();
+  if (!Number.isInteger(productId) || !isStage(stage)) return { ok: false, ran: 0 };
+  const results = await moveProductStage(productId, stage);
+  refresh();
+  return { ok: true, ran: fired(results) };
+}
+
+// ----------------------------------------------------------------- listings
+
+export async function generateListingAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  await ensureDb();
+  const productId = int(fd.get("productId"), 1, 2_000_000_000, 0);
+  const [product] = productId ? await db.select().from(products).where(eq(products.id, productId)) : [];
+  if (!product) return { error: "required" };
+
+  let target: string;
+  try {
+    const made = await produceListing(product, {
+      marketplace: str(fd, "marketplace"),
+      tone: oneOf(TONES, str(fd, "tone"), "clear"),
+    });
+    await emit("listing_generated", { productId: product.id, clientId: product.clientId, listingId: made.listingId, score: made.score });
+    target = `/listings/${made.listingId}${made.aiError ? `?ai_error=${encodeURIComponent(made.aiError.slice(0, 300))}` : ""}`;
+  } catch {
+    return { error: "failed" };
+  }
+  refresh();
+  redirect(target);
+}
+
+export type RegenerateInput = { features: string; featuresAr: string; keywords: string; marketplace: string; tone: string; notes: string };
+export type RegenerateResult =
+  | { ok: false }
+  | { ok: true; content: ListingContent; marketplace: string; engine: string; model: string | null; aiError: string | null; ran: number };
+
+export async function regenerateListingAction(listingId: number, input: RegenerateInput): Promise<RegenerateResult> {
+  await ensureDb();
+  const [listing] = await db.select().from(listings).where(eq(listings.id, listingId));
+  if (!listing) return { ok: false };
+  try {
+    const [product] = await db
+      .update(products)
+      .set({
+        features: String(input.features ?? "").trim().slice(0, 2000),
+        featuresAr: String(input.featuresAr ?? "").trim().slice(0, 2000),
+        keywords: String(input.keywords ?? "").trim().slice(0, 500),
+      })
+      .where(eq(products.id, listing.productId))
+      .returning();
+    const made = await produceListing(product, {
+      marketplace: isMarketplace(input.marketplace) ? input.marketplace : listing.marketplace,
+      tone: oneOf(TONES, String(input.tone), "clear"),
+      notes: String(input.notes ?? "").trim().slice(0, 500),
+      listingId,
+    });
+    const results = await emit("listing_generated", { productId: product.id, clientId: product.clientId, listingId, score: made.score });
+    const [fresh] = await db.select().from(listings).where(eq(listings.id, listingId));
+    refresh();
+    return {
+      ok: true,
+      content: {
+        titleEn: fresh.titleEn,
+        titleAr: fresh.titleAr,
+        bulletsEn: fresh.bulletsEn,
+        bulletsAr: fresh.bulletsAr,
+        descriptionEn: fresh.descriptionEn,
+        descriptionAr: fresh.descriptionAr,
+        searchTerms: fresh.searchTerms,
+      },
+      marketplace: fresh.marketplace,
+      engine: fresh.engine,
+      model: fresh.model,
+      aiError: made.aiError,
+      ran: fired(results),
+    };
+  } catch {
+    return { ok: false };
+  }
+}
+
+const clean = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+const cleanList = (v: unknown) => (Array.isArray(v) ? v.slice(0, 8).map((b) => clean(b, 600)).filter(Boolean) : []);
+
+export async function saveListingAction(listingId: number, input: ListingContent): Promise<{ ok: boolean }> {
+  await ensureDb();
+  const [row] = await db
+    .select({ listing: listings, product: products })
+    .from(listings)
+    .innerJoin(products, eq(listings.productId, products.id))
+    .where(eq(listings.id, listingId));
+  if (!row || !isMarketplace(row.listing.marketplace)) return { ok: false };
+  const content: ListingContent = {
+    titleEn: clean(input?.titleEn, 400),
+    titleAr: clean(input?.titleAr, 400),
+    bulletsEn: cleanList(input?.bulletsEn),
+    bulletsAr: cleanList(input?.bulletsAr),
+    descriptionEn: clean(input?.descriptionEn, 10_000),
+    descriptionAr: clean(input?.descriptionAr, 10_000),
+    searchTerms: clean(input?.searchTerms, 1000),
+  };
+  await db
+    .update(listings)
+    .set({ ...content, edited: true, score: scoreListing(content, row.listing.marketplace, briefOf(row.product)), updatedAt: new Date() })
+    .where(eq(listings.id, listingId));
+  refresh();
+  return { ok: true };
+}
+
+export async function setListingStatusAction(listingId: number, status: string): Promise<{ ok: boolean; ran: number }> {
+  await ensureDb();
+  if (!(LISTING_STATUSES as readonly string[]).includes(status)) return { ok: false, ran: 0 };
+  const [row] = await db
+    .update(listings)
+    .set({ status, updatedAt: new Date() })
+    .where(eq(listings.id, listingId))
+    .returning({ productId: listings.productId });
+  if (!row) return { ok: false, ran: 0 };
+  const [product] = await db.select().from(products).where(eq(products.id, row.productId));
+  let results: RunResult[] = [];
+  const ctx = { productId: row.productId, clientId: product?.clientId, listingId };
+  if (status === "approved") results = await emit("listing_approved", ctx);
+  if (status === "published") results = await emit("listing_published", ctx);
+  refresh();
+  return { ok: true, ran: fired(results) };
+}
+
+// -------------------------------------------------------------- automations
+
+export async function createAutomationAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  await ensureDb();
+  const name = str(fd, "name", 100);
+  if (!name) return { error: "required" };
+  const trigger = oneOf(TRIGGERS, str(fd, "trigger"), "product_created");
+  const action = oneOf(ACTIONS, str(fd, "action"), "create_task");
+
+  const condition: AutomationCondition = {};
+  if (trigger === "stage_entered") condition.stage = oneOf(STAGES, str(fd, "condStage"), "content");
+  if (trigger === "listing_generated") condition.maxScore = int(fd.get("maxScore"), 1, 100, 80);
+  if (trigger === "quota_reached") condition.pct = int(fd.get("pct"), 1, 200, 90);
+  if (trigger === "product_stale") condition.days = int(fd.get("days"), 1, 60, 3);
+
+  const config: AutomationConfig = {};
+  if (action === "create_task") {
+    config.kind = oneOf(TASK_KINDS, str(fd, "kind"), "follow_up");
+    if (config.kind === "custom") {
+      config.title = str(fd, "taskTitle", 120);
+      if (!config.title) return { error: "required" };
+    }
+    config.team = oneOf(TEAMS, str(fd, "team"), "accounts");
+    config.dueDays = int(fd.get("dueDays"), 0, 60, 1);
+    config.whatsapp = fd.get("whatsapp") === "on";
+  }
+  if (action === "move_stage") config.stage = oneOf(STAGES, str(fd, "toStage"), "publishing");
+
+  try {
+    await db.insert(automations).values({ name, trigger, condition, action, config });
+  } catch {
+    return { error: "failed" };
+  }
+  refresh();
+  return { ok: true };
+}
+
+export async function toggleAutomationAction(id: number, enabled: boolean) {
+  await ensureDb();
+  await db.update(automations).set({ enabled: Boolean(enabled) }).where(eq(automations.id, id));
+  refresh();
+}
+
+export async function deleteAutomationAction(id: number) {
+  await ensureDb();
+  await db.delete(automations).where(eq(automations.id, id));
+  refresh();
+}
+
+export async function runChecksAction(): Promise<{ fired: number }> {
+  await ensureDb();
+  const results = await runScheduledChecks();
+  refresh();
+  return { fired: fired(results) };
+}
+
+// -------------------------------------------------------------------- tasks
+
+export async function createTaskAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  await ensureDb();
+  const title = str(fd, "title", 160);
+  if (!title) return { error: "required" };
+  try {
+    await db.insert(tasks).values({
+      kind: "custom",
+      title,
+      team: oneOf(TEAMS, str(fd, "team"), "accounts"),
+      dueAt: new Date(Date.now() + int(fd.get("dueDays"), 0, 60, 1) * 86_400_000),
+    });
+  } catch {
+    return { error: "failed" };
+  }
+  refresh();
+  return { ok: true };
+}
+
+export async function toggleTaskAction(id: number, done: boolean) {
+  await ensureDb();
+  await db.update(tasks).set({ done: Boolean(done), doneAt: done ? new Date() : null }).where(eq(tasks.id, id));
+  refresh();
+}

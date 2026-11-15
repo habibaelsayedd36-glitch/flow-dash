@@ -1,0 +1,394 @@
+@import "tailwindcss";
+
+/*
+ * Flow Dashboard design tokens.
+ *
+ * Every value below is copied from the stylesheet served with
+ * app.flow-agency-eg.com (the team dashboard) and portal.flow-agency-eg.com
+ * (Flow Space). They are the brand: do not adjust them by eye.
+ */
+@theme static {
+  /* brand palette */
+  --color-flow-green: #143c28;
+  --color-flow-green-hover: #0e2e1e;
+  --color-flow-green-light: #2e6b45;
+  --color-flow-green-deep: #0b2417;
+  --color-flow-lime: #c4f075;
+  --color-flow-lime-hover: #b2e860;
+  --color-flow-lime-soft: #e8f8ce;
+  --color-flow-bg: #fbfbf7;
+  --color-flow-bg-soft: #f4f7ec;
+  --color-flow-bg-muted: #eaf1de;
+  --color-flow-border: #dee9d0;
+
+  /* app tokens */
+  --color-background: #edf1ea;
+  --color-foreground: #10231a;
+  --color-card: #ffffff;
+  --color-primary: #143c28;
+  --color-primary-foreground: #fbfbf7;
+  --color-secondary: #eaf1de;
+  --color-secondary-foreground: #143c28;
+  --color-muted: #f2f5ee;
+  --color-muted-foreground: #55685c;
+  --color-accent: #c4f075;
+  --color-accent-foreground: #143c28;
+  --color-destructive: #c0392b;
+  --color-success: #2e6b45;
+  --color-warning: #c98a1b;
+  --color-border: #e3eadb;
+  --color-input: #dce5d2;
+  --color-ring: #2e6b45;
+
+  /* Older class names still used in components. Same values as the tokens above. */
+  --color-forest: #143c28;
+  --color-forest-hover: #0e2e1e;
+  --color-forest-deep: #0b2417;
+  --color-moss: #2e6b45;
+  --color-lime: #c4f075;
+  --color-lime-hover: #b2e860;
+  --color-lime-soft: #e8f8ce;
+  --color-canvas: #edf1ea;
+  --color-paper: #fbfbf7;
+  --color-sage: #eaf1de;
+  --color-sage-soft: #f4f7ec;
+  --color-line: #e3eadb;
+  --color-ink: #10231a;
+  --color-mute: #55685c;
+  /* status tints: the dashboard uses Tailwind's amber-100/900 and red-50 */
+  --color-amber-ink: #7b3306;
+  --color-amber-soft: #fef3c6;
+  --color-danger: #c0392b;
+  --color-danger-soft: #fef2f2;
+
+  /* radius scale: --radius is 1rem, so xl (20px) is rounder than 2xl (16px) */
+  --radius-sm: 0.75rem;
+  --radius-md: 0.875rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+  --radius-2xl: 1rem;
+  --radius-3xl: 1.5rem;
+
+  /* shadows are tinted with the deepest brand green, never neutral black */
+  --shadow-xs: 0 1px 2px #08170e0d;
+  --shadow-sm: 0 2px 10px #08170e0f, 0 1px 2px #08170e0a;
+  --shadow-md: 0 10px 30px #08170e17, 0 2px 6px #08170e0d;
+  --shadow-lg: 0 24px 56px #08170e24, 0 8px 18px #08170e12;
+  --shadow-xl: 0 40px 90px #08170e33, 0 12px 28px #08170e1a;
+}
+
+@theme inline {
+  --font-display: var(--ff-display);
+  --font-body: var(--ff-body);
+}
+
+:root {
+  --ff-display: var(--font-funnel), var(--font-cairo), system-ui, sans-serif;
+  --ff-body: var(--font-didact), var(--font-cairo), system-ui, sans-serif;
+}
+/* Arabic content uses Cairo for everything, as on the live site. */
+[lang="ar"] {
+  --ff-display: var(--font-cairo), system-ui, sans-serif;
+  --ff-body: var(--font-cairo), system-ui, sans-serif;
+}
+[lang="en"] {
+  --ff-display: var(--font-funnel), var(--font-cairo), system-ui, sans-serif;
+  --ff-body: var(--font-didact), var(--font-cairo), system-ui, sans-serif;
+}
+
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--color-border);
+  }
+  [lang] {
+    font-family: var(--ff-body);
+  }
+  body {
+    background: var(--color-background);
+    color: var(--color-foreground);
+    -webkit-font-smoothing: antialiased;
+  }
+  /* Funnel Display is for headings only. Body copy, labels and buttons stay in Didact Gothic. */
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--ff-display);
+    font-weight: 700;
+  }
+  h1 {
+    letter-spacing: -0.035em;
+    line-height: 1.02;
+  }
+  h2 {
+    letter-spacing: -0.028em;
+    line-height: 1.08;
+  }
+  h3 {
+    letter-spacing: -0.018em;
+    line-height: 1.18;
+  }
+  h4 {
+    letter-spacing: -0.01em;
+    line-height: 1.28;
+  }
+  /* Arabic script is never letter-spaced and needs taller lines. */
+  [lang="ar"]:is(h1, h2, h3, h4),
+  [lang="ar"] :is(h1, h2, h3, h4) {
+    letter-spacing: 0;
+    line-height: 1.5;
+  }
+  /* Didact Gothic ships one weight, so genuinely bold text is set in the display face. */
+  strong,
+  b,
+  .font-semibold,
+  .font-bold {
+    font-family: var(--ff-display);
+  }
+  ::selection {
+    background: var(--color-primary);
+    color: var(--color-primary-foreground);
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+  }
+  .on-dark :focus-visible {
+    outline-color: var(--color-flow-lime);
+  }
+}
+
+@layer components {
+  /* page title: "font-display text-3xl font-bold tracking-tight text-flow-green" */
+  .h-page {
+    font-family: var(--ff-display);
+    font-size: 1.875rem;
+    font-weight: 700;
+    letter-spacing: -0.035em;
+    line-height: 1.08;
+    color: var(--color-flow-green);
+  }
+  .h-section {
+    font-family: var(--ff-display);
+    font-size: 1.125rem;
+    font-weight: 700;
+    letter-spacing: -0.018em;
+    line-height: 1.25;
+    color: var(--color-flow-green);
+  }
+  .eyebrow {
+    font-family: var(--ff-display);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    line-height: 1.4;
+    text-transform: uppercase;
+    color: var(--color-muted-foreground);
+  }
+  [lang="ar"] .h-page,
+  [lang="ar"] .h-section {
+    letter-spacing: 0;
+    line-height: 1.5;
+  }
+  [lang="ar"] .eyebrow {
+    letter-spacing: 0;
+    font-size: 0.75rem;
+  }
+
+  /* cards: rounded-3xl, hairline border, brand-tinted shadow */
+  .card {
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
+    border-radius: 1.5rem;
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* buttons: pill, text-sm, body font — the dashboard's Button component */
+  .btn {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    height: 2.5rem;
+    padding-inline: 1.25rem;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    font-family: var(--ff-body);
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, box-shadow 150ms ease;
+  }
+  .btn:has(> svg) {
+    padding-inline: 1rem;
+  }
+  .btn:focus-visible {
+    outline: none;
+    border-color: var(--color-ring);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-ring) 50%, transparent);
+  }
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .btn-sm {
+    height: 2rem;
+    gap: 0.375rem;
+    padding-inline: 0.875rem;
+  }
+  .btn-sm:has(> svg) {
+    padding-inline: 0.75rem;
+  }
+  .btn-primary {
+    background: var(--color-primary);
+    color: var(--color-primary-foreground);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: color-mix(in oklab, var(--color-primary) 90%, transparent);
+  }
+  /* outline variant: "border border-border bg-card shadow-xs hover:bg-muted" */
+  .btn-ghost {
+    background: var(--color-card);
+    color: var(--color-foreground);
+    border-color: var(--color-border);
+    box-shadow: var(--shadow-xs);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: var(--color-muted);
+  }
+  .btn-lime {
+    background: var(--color-flow-lime);
+    color: var(--color-flow-green);
+  }
+  .btn-lime:hover:not(:disabled) {
+    background: var(--color-flow-lime-hover);
+  }
+  .btn-icon,
+  .btn-icon:has(> svg) {
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+  }
+
+  /* inputs: "rounded-xl border border-input px-3 text-sm shadow-xs", ring on focus */
+  .field {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    min-height: 2.5rem;
+    padding: 0.25rem 0.75rem;
+    border: 1px solid var(--color-input);
+    border-radius: 1.25rem;
+    background: var(--color-card);
+    color: var(--color-foreground);
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    box-shadow: var(--shadow-xs);
+    outline: none;
+    transition: color 150ms ease, box-shadow 150ms ease, border-color 150ms ease;
+  }
+  .field::placeholder {
+    color: var(--color-muted-foreground);
+  }
+  .field:focus-visible {
+    outline: none;
+    border-color: var(--color-ring);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-ring) 50%, transparent);
+  }
+  .field[aria-invalid="true"] {
+    border-color: var(--color-destructive);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-destructive) 20%, transparent);
+  }
+  textarea.field {
+    padding-block: 0.625rem;
+    line-height: 1.5;
+    resize: vertical;
+  }
+  .label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-size: 0.875rem;
+    line-height: 1.2;
+    font-weight: 500;
+    color: var(--color-foreground);
+  }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    height: 1.5rem;
+    padding-inline: 0.625rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    line-height: 1rem;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  /* status tints used by the dashboard: emerald-100/900, amber-100/900, red-50/700 */
+  .pill-ok {
+    background: #d0fae5;
+    color: #004e3b;
+  }
+  .pill-warn {
+    background: #fef3c6;
+    color: #7b3306;
+  }
+  .pill-bad {
+    background: #fef2f2;
+    color: #bf000f;
+    box-shadow: inset 0 0 0 1px #ffcaca;
+  }
+  .pill-mute {
+    background: var(--color-secondary);
+    color: var(--color-secondary-foreground);
+  }
+  .pill-dark {
+    background: var(--color-primary);
+    color: var(--color-primary-foreground);
+  }
+  /* the brand pill beside the logo: "bg-flow-lime font-display font-bold text-flow-green" */
+  .pill-lime {
+    background: var(--color-flow-lime);
+    color: var(--color-flow-green);
+    font-family: var(--ff-display);
+    font-weight: 700;
+  }
+
+  /* brand panel: flat flow-green, exactly like the dashboard's sign-in panel. No gradient. */
+  .panel-dark {
+    background: var(--color-flow-green);
+    color: #fff;
+  }
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.rise {
+  animation: rise 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
