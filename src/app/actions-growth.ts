@@ -4,7 +4,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { ensureDb } from "@/db/ensure";
-import { adCampaigns, clients, healthChecks, keywords, leads, orders, products, reviews } from "@/db/schema";
+import { adCampaigns, clients, healthChecks, keywords, leads, listings, orders, products, reviews } from "@/db/schema";
 import { generateText, getAiProvider } from "@/lib/ai";
 import { LEAD_SOURCES, LEAD_STATUSES, MARKETPLACE_META, ORDER_STATUSES, PLANS, REVIEW_STATUSES, isMarketplace, type PlanId } from "@/lib/catalog";
 import { checkStock, checkStockForSkus, emit } from "@/lib/engine";
@@ -299,6 +299,38 @@ export async function setLeadStatusAction(id: number, status: string) {
   if (!(LEAD_STATUSES as readonly string[]).includes(status)) return;
   await db.update(leads).set({ status }).where(eq(leads.id, id));
   refresh();
+}
+
+export async function askCommerceAssistantAction(question: string): Promise<{ ok: boolean; answer?: string; error?: string }> {
+  await ensureDb();
+  const prompt = String(question ?? "").trim().slice(0, 1200);
+  if (!prompt) return { ok: false, error: "اكتبي سؤالك الأول." };
+  const provider = await getAiProvider();
+  if (!provider) return { ok: false, error: "مفيش AI provider متوصل. وصّلي مفتاح AI من Settings الأول." };
+  const [productCount, listingStats, orderStats, keywordCount] = await Promise.all([
+    db.select({ n: sql<number>`count(*)::int` }).from(products),
+    db.select({ n: sql<number>`count(*)::int`, avg: sql<number>`coalesce(round(avg(${listings.score})), 0)::int` }).from(listings),
+    db.select({ n: sql<number>`count(*)::int`, revenue: sql<number>`coalesce(sum(${orders.amount}), 0)::int` }).from(orders).where(sql`${orders.status} not in ('cancelled', 'returned')`),
+    db.select({ n: sql<number>`count(*)::int` }).from(keywords),
+  ]);
+  const context = {
+    products: productCount[0]?.n ?? 0,
+    listings: listingStats[0]?.n ?? 0,
+    averageListingScore: listingStats[0]?.avg ?? 0,
+    loggedOrders: orderStats[0]?.n ?? 0,
+    loggedOrderRevenueEGP: orderStats[0]?.revenue ?? 0,
+    trackedKeywords: keywordCount[0]?.n ?? 0,
+  };
+  try {
+    const answer = await generateText(
+      provider,
+      "You are FLOW's commerce operations assistant. Answer in the same language as the user, usually Egyptian Arabic. Use only the supplied dashboard snapshot for numerical or account-specific claims. Clearly say when information is not available or is manually imported; never invent live marketplace data, competitor rankings, sales, or recommendations as facts. Give concise practical next steps.",
+      `Dashboard snapshot (not live marketplace sync): ${JSON.stringify(context)}\\n\\nUser question: ${prompt}`,
+    );
+    return { ok: true, answer: answer.slice(0, 5000) };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message.slice(0, 240) : "AI request failed." };
+  }
 }
 
 const PLATFORM_MARKET: Record<string, string> = { Amazon: "amazon", Noon: "noon", "TikTok Shop": "tiktok", Shopify: "shopify" };
