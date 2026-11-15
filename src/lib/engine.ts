@@ -54,6 +54,9 @@ export async function produceListing(
   const tone = opts.tone || "clear";
   const brief = briefOf(product);
   const provider = await getAiProvider();
+  const [voiceRow] = await db.select({ value: settings.value }).from(settings).where(eq(settings.key, "brand_voice"));
+  const brandVoice = voiceRow?.value?.trim() ?? "";
+  const aiNotes = [brandVoice ? `Brand voice rules (follow these): ${brandVoice}` : "", opts.notes ?? ""].filter(Boolean).join("\\n\\n");
 
   let content: ListingContent;
   let engine: "ai" | "template" = "template";
@@ -61,7 +64,7 @@ export async function produceListing(
 
   if (provider) {
     try {
-      content = await generateWithAi(provider, brief, m, tone, opts.notes ?? "");
+      content = await generateWithAi(provider, brief, m, tone, aiNotes);
       engine = "ai";
     } catch (e) {
       aiError = e instanceof Error ? e.message : "AI request failed";
