@@ -47,14 +47,13 @@ export function AIAdStudio() {
 
   useEffect(() => () => {
     if (originalUrl.current) URL.revokeObjectURL(originalUrl.current);
-    if (preview) URL.revokeObjectURL(preview);
     void clientRef.current?.unload().catch(() => undefined);
-  }, [preview]);
+  }, []);
 
   const chooseFile = (next: File | null) => {
     if (originalUrl.current) URL.revokeObjectURL(originalUrl.current);
     if (preview) URL.revokeObjectURL(preview);
-    setPreview("");
+    setPreview((current) => { if (current) URL.revokeObjectURL(current); return ""; });
     setFile(next);
     setError("");
     originalUrl.current = next ? URL.createObjectURL(next) : "";
@@ -64,7 +63,7 @@ export function AIAdStudio() {
     if (!file || busy) return;
     setBusy(true);
     setError("");
-    setPreview("");
+    setPreview((current) => { if (current) URL.revokeObjectURL(current); return ""; });
     setProgress(0);
     try {
       const client = clientRef.current ?? Txt2ImgWorkerClient.createDefault();
