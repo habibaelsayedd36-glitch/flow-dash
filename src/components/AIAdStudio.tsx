@@ -2,26 +2,25 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Download, ImagePlus, Loader2, Sparkles } from "lucide-react";
-import { compose, cutout, IMAGE_PRESETS } from "@/lib/image-engine";
 
 type Style = "luxury" | "minimal" | "nature" | "studio" | "lifestyle";
 type Category = "beauty" | "electronics" | "fashion" | "food" | "home" | "general";
 
 const STYLES: Record<Style, string> = {
-  luxury: "premium luxury advertising lighting, elegant refined reflections, dramatic but balanced softbox lighting",
-  minimal: "clean modern minimal composition, bright diffused studio lighting, subtle realistic soft shadows",
-  nature: "fresh natural daylight, gentle organic lighting, delicate realistic highlights",
-  studio: "high-end commercial photography lighting, professional three-point softbox setup, realistic soft shadows",
-  lifestyle: "premium editorial product photography lighting, soft natural window-light effect, polished composition",
+  luxury: "premium luxury commercial studio lighting, elegant controlled highlights and refined reflections",
+  minimal: "bright clean diffused studio lighting, soft subtle contact shadow, minimal polished presentation",
+  nature: "soft natural daylight, gentle realistic highlights, fresh clean product photography",
+  studio: "high-end professional three-point softbox lighting, crisp details and realistic contact shadow",
+  lifestyle: "premium editorial product lighting, soft window-light quality, polished realistic finish",
 };
 
 const CATEGORIES: Record<Category, string> = {
-  beauty: "premium cosmetics and skincare product photography, clean polished presentation",
-  electronics: "premium technology product photography, crisp precise highlights",
-  fashion: "premium fashion product photography, refined editorial presentation",
-  food: "appetizing premium food product photography, fresh realistic detail",
-  home: "premium homeware product photography, refined contemporary presentation",
-  general: "premium ecommerce product photography with a clean professional presentation",
+  beauty: "premium cosmetics and skincare product photography",
+  electronics: "premium electronics product photography with precise clean details",
+  fashion: "premium fashion accessory product photography",
+  food: "premium packaged food product photography with realistic materials",
+  home: "premium homeware product photography",
+  general: "premium ecommerce product photography",
 };
 
 function canvasBlob(canvas: HTMLCanvasElement): Promise<Blob> {
@@ -48,7 +47,6 @@ export function AIAdStudio() {
 
   const chooseFile = (next: File | null) => {
     if (originalUrl.current) URL.revokeObjectURL(originalUrl.current);
-    if (preview) URL.revokeObjectURL(preview);
     setPreview((current) => { if (current) URL.revokeObjectURL(current); return ""; });
     setFile(next);
     setError("");
@@ -62,29 +60,92 @@ export function AIAdStudio() {
     setPreview((current) => { if (current) URL.revokeObjectURL(current); return ""; });
     setProgress(4);
     try {
-      setStatus("Loading the product cut-out model…");
-      // Preserve the uploaded product pixels; AI is used only to identify the
-      // foreground mask. No generative redraw, so printed text is not rewritten.
+      setStatus("Preparing your product reference…");
+      const details = extra.trim() ? ` Additional direction: ${extra.trim()}.` : "";
+      const prompt = [
+        "Create a photorealistic, premium ecommerce product photograph by carefully redrawing and reconstructing the exact same physical product shown in the reference image.",
+        "Recreate the complete container or bottle as a realistic three-dimensional object: its body, cap, pump, edges, proportions, material, finish and original product colors. Improve the shape rendering, reflections, lighting and photographic quality without redesigning the packaging.",
+        "CRITICAL LABEL PRESERVATION: treat the original front label, logo and all printed packaging artwork as immutable source artwork. Keep the same brand logo, exact words, letters, numbers, typography, layout, colors, symbols and label placement. Do not invent, paraphrase, translate, correct, replace, omit or add any text. Do not create a new brand or alternate label. Preserve the reference label as faithfully as possible.",
+        "Place one complete product upright, centered, fully visible, on a perfectly uniform pure white #FFFFFF background. No colored backdrop, gradient, scene, props, hands, people, borders or watermark. Only a very subtle realistic contact shadow directly beneath the product.",
+        CATEGORIES[category] + ".",
+        STYLES[style] + ".",
+        details,
+        "Square front-facing Amazon main product image. Photorealistic, sharp, clean, high-end studio photography. The product itself must remain the same item as the reference."
+      ].join(" ");
       setProgress(12);
-      const cut = await cutout(file, 0);
-      if (cut.flags.includes("nothing_found") || cut.productPx === 0) {
-        throw new Error("Could not detect the product. Try a clearer photo with the full product visible.");
+      setStatus("AI is rebuilding the product and its packaging…");
+
+      // FLUX.2 Klein accepts a compact reference image; convert it to PNG at max 512 px.
+      const sourceBitmap = await createImageBitmap(file);
+      const inputCanvas = document.createElement("canvas");
+      const inputScale = Math.min(512 / sourceBitmap.width, 512 / sourceBitmap.height, 1);
+      inputCanvas.width = Math.max(1, Math.round(sourceBitmap.width * inputScale));
+      inputCanvas.height = Math.max(1, Math.round(sourceBitmap.height * inputScale));
+      const inputContext = inputCanvas.getContext("2d");
+      if (!inputContext) {
+        sourceBitmap.close();
+        throw new Error("Your browser could not prepare the product image.");
       }
-      if (cut.flags.includes("not_separated")) {
-        throw new Error("The product and background look too similar to separate reliably. Try a photo with stronger contrast.");
+      inputContext.drawImage(sourceBitmap, 0, 0, inputCanvas.width, inputCanvas.height);
+      sourceBitmap.close();
+      const modelInputBlob = await canvasBlob(inputCanvas);
+      const bytes = new Uint8Array(await modelInputBlob.arrayBuffer());
+      let binary = "";
+      const chunkSize = 0x8000;
+      for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+        binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
       }
-      if (cut.flags.includes("touches_edge")) {
-        throw new Error("The product touches the edge of the photo. Please upload a photo with some space around the product.");
+      const image_b64 = btoa(binary);
+      const controller = new AbortController();
+      const requestTimer = window.setTimeout(() => controller.abort(), 52_000);
+      let response: Response;
+      try {
+        response = await fetch("/api/ai-ad/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt, image_b64, image_type: "image/png" }),
+          signal: controller.signal,
+        });
+      } catch (requestError) {
+        if (controller.signal.aborted) throw new Error("AI image generation took too long. Please try again.");
+        throw requestError;
+      } finally {
+        window.clearTimeout(requestTimer);
       }
-      setProgress(78);
-      setStatus("Placing the original product on pure white…");
-      const canvas = compose(cut, IMAGE_PRESETS.amazon.size, IMAGE_PRESETS.amazon.fill);
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || "AI image generation failed.");
+      }
+      setProgress(82);
+      setStatus("Finishing the white-background product image…");
+      const generatedBlob = await response.blob();
+      if (!generatedBlob.size || !generatedBlob.type.startsWith("image/")) {
+        throw new Error("AI returned an invalid image. Please try again.");
+      }
+      const generated = await createImageBitmap(generatedBlob);
+      const canvas = document.createElement("canvas");
+      canvas.width = 2000;
+      canvas.height = 2000;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        generated.close();
+        throw new Error("Your browser could not create the final image.");
+      }
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillRect(0, 0, 2000, 2000);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      const scale = Math.min(2000 / generated.width, 2000 / generated.height);
+      const w = generated.width * scale;
+      const h = generated.height * scale;
+      ctx.drawImage(generated, (2000 - w) / 2, (2000 - h) / 2, w, h);
+      generated.close();
       const blob = await canvasBlob(canvas);
       setPreview(URL.createObjectURL(blob));
-      setStatus("Your original product photo is ready on pure white.");
+      setStatus("Your AI-redrawn product image is ready.");
       setProgress(100);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong while preparing the product image.");
+      setError(e instanceof Error ? e.message : "Something went wrong while creating the product image.");
       setStatus("");
       setProgress(0);
     } finally {
@@ -117,16 +178,16 @@ export function AIAdStudio() {
         <div className="card overflow-hidden p-3 sm:p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
             <h3 className="h-section">Amazon main image result</h3>
-            <span className="rounded-full bg-lime-soft px-3 py-1 text-xs font-medium text-forest">Original product on pure white</span>
+            <span className="rounded-full bg-lime-soft px-3 py-1 text-xs font-medium text-forest">AI product redraw</span>
           </div>
           {preview ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={preview} alt="Original product on pure white background" className="mx-auto aspect-square w-full max-w-xl rounded-xl object-contain" />
+            <img src={preview} alt="AI-redrawn product on white background" className="mx-auto aspect-square w-full max-w-xl rounded-xl object-contain" />
           ) : (
             <div className="grid aspect-square w-full place-items-center rounded-xl bg-sage-soft text-center text-sm text-mute">
               <div className="max-w-xs px-6">
                 <Sparkles className="mx-auto mb-3 text-moss" size={30} />
-                Your Amazon-ready main image will appear here.
+                Your AI-redrawn Amazon product image will appear here.
               </div>
             </div>
           )}
@@ -136,8 +197,8 @@ export function AIAdStudio() {
 
       <aside className="card flex flex-col gap-5 p-5 sm:p-6">
         <div>
-          <h2 className="h-section">Create an ad scene</h2>
-          <p className="mt-1 text-[13px] leading-relaxed text-mute">The original product pixels and printed text are preserved. The background is removed and replaced with pure white; no generative redraw is applied.</p>
+          <h2 className="h-section">Redraw product for Amazon</h2>
+          <p className="mt-1 text-[13px] leading-relaxed text-mute">AI rebuilds the bottle or container and creates a clean studio image on pure white, while being instructed to preserve the original label and printed details.</p>
         </div>
         <div>
           <label className="label" htmlFor="ad-category">Product category</label>
@@ -152,17 +213,17 @@ export function AIAdStudio() {
           </select>
         </div>
         <div>
-          <label className="label" htmlFor="ad-extra">Scene details (optional)</label>
-          <textarea id="ad-extra" className="field min-h-24 resize-y" value={extra} onChange={(e) => setExtra(e.target.value)} placeholder="Example: warm beige marble, soft sunlight, delicate flowers…" maxLength={240} />
+          <label className="label" htmlFor="ad-extra">Extra instructions (optional)</label>
+          <textarea id="ad-extra" className="field min-h-24 resize-y" value={extra} onChange={(e) => setExtra(e.target.value)} placeholder="Example: keep the cap glossy black, make the bottle edges clearer…" maxLength={240} />
         </div>
         <button type="button" className="btn btn-primary w-full" onClick={generate} disabled={!file || busy}>
           {busy ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-          {busy ? "Creating your ad…" : "Generate AI ad"}
+          {busy ? "Redrawing product…" : "Generate AI image"}
         </button>
-        {busy && <div className="space-y-2" aria-live="polite"><div className="h-2 overflow-hidden rounded-full bg-sage-soft"><div className="h-full rounded-full bg-forest transition-all" style={{ width: progress + "%" }} /></div><p className="text-xs leading-relaxed text-mute">{status || "Working…"}</p><p className="text-[11px] text-mute">Keep this tab open while the image is being prepared.</p></div>}
+        {busy && <div className="space-y-2" aria-live="polite"><div className="h-2 overflow-hidden rounded-full bg-sage-soft"><div className="h-full rounded-full bg-forest transition-all" style={{ width: progress + "%" }} /></div><p className="text-xs leading-relaxed text-mute">{status || "Working…"}</p><p className="text-[11px] text-mute">Keep this tab open while AI is generating the image.</p></div>}
         {error && <p role="alert" className="rounded-xl bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
         <div className="border-t border-line pt-4 text-xs leading-relaxed text-mute">
-          Original product pixels · Pure white #FFFFFF background · 2000 × 2000 px export.
+          Pure white #FFFFFF background · 2000 × 2000 px export. AI may still slightly alter very small printed text, so review the label before publishing.
         </div>
       </aside>
     </section>
