@@ -310,7 +310,7 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
           { role: "system", content: system },
           { role: "user", content: user },
         ],
-        ...(json ? { response_format: { type: "json_object" } } : {}),
+        // Groq can reject otherwise valid generations during constrained JSON-mode validation.\n        // Keep the JSON-only instruction in the prompt and parse/repair the returned text ourselves.\n        ...(json && p.id !== "groq" ? { response_format: { type: "json_object" } } : {}),
       },
       p.label,
     )) as { choices?: { message?: { content?: string } }[] };
