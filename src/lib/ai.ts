@@ -322,9 +322,46 @@ export async function testProvider(p: AiProvider): Promise<string> {
   return text.trim().slice(0, 80);
 }
 
+function hasShortBullets(content: ListingContent, m: Marketplace): boolean {
+  const min = RULES[m].bulletMin;
+  return content.bulletsEn.length !== RULES[m].bullets ||
+    content.bulletsAr.length !== RULES[m].bullets ||
+    [...content.bulletsEn, ...content.bulletsAr].some((bullet) => bullet.trim().length < min);
+}
+
+async function repairShortBullets(
+  p: AiProvider,
+  brief: ProductBrief,
+  m: Marketplace,
+  content: ListingContent,
+  tail: string,
+): Promise<ListingContent> {
+  if (!hasShortBullets(content, m)) return content;
+  const min = RULES[m].bulletMin;
+  const max = RULES[m].bulletMax;
+  const repairPrompt = `The previous draft failed the mandatory bullet-length check. Rewrite the listing JSON below.
+Every one of the exactly 5 English bullets AND exactly 5 Arabic bullets must be at least ${min} characters including spaces and no more than ${max}.
+Keep each English/Arabic pair aligned in meaning and order. Expand each point using only facts from the product brief. Explain the practical meaning of the stated feature without inventing specifications, materials, performance, compatibility, or benefits. Do not pad with repeated phrases. If a fact is too short, combine it with a different supplied fact while keeping the five points distinct.
+Preserve all other fields where possible. Return only the required JSON object.
+Product brief:
+${userPrompt(brief, m, "clear", "", tail)}
+Previous draft:
+${JSON.stringify(content)}
+Required JSON shape:
+{${LISTING_SHAPE}}`;
+  const repaired = toListing(parseJson(await callModel(p, SYSTEM, repairPrompt, true)), m);
+  if (hasShortBullets(repaired, m)) {
+    const short = [...repaired.bulletsEn, ...repaired.bulletsAr].filter((bullet) => bullet.trim().length < min).length;
+    throw new Error(`${p.label}: generated bullets still fail the ${min}-character minimum (${short} short bullets). Add more product facts or retry after the provider limit resets.`);
+  }
+  return repaired;
+}
+
 export async function generateWithAi(p: AiProvider, brief: ProductBrief, m: Marketplace, tone: string, notes: string): Promise<ListingContent> {
-  const text = await callModel(p, SYSTEM, userPrompt(brief, m, tone, notes, `Return exactly this JSON shape:\n{${LISTING_SHAPE}}`), true);
-  return toListing(parseJson(text), m);
+  const tail = `Return exactly this JSON shape:\n{${LISTING_SHAPE}}`;
+  const text = await callModel(p, SYSTEM, userPrompt(brief, m, tone, notes, tail), true);
+  const content = toListing(parseJson(text), m);
+  return repairShortBullets(p, brief, m, content, tail);
 }
 
 /** Spec fields a listing job tries to fill. Values that are not in the sheet are estimates. */
@@ -358,13 +395,15 @@ Also return a "specs" object with your best estimate for: ${missing.join(", ") |
 Return exactly this JSON shape:
 {${LISTING_SHAPE},"specs":{${missing.map((k) => `"${k}":""`).join(",")}}}`;
   const raw = parseJson(await callModel(p, SYSTEM, userPrompt(brief, m, tone, "", tail), true));
+  const initialContent = toListing(raw, m);
+  const content = await repairShortBullets(p, brief, m, initialContent, tail);
   const rawSpecs = (raw.specs && typeof raw.specs === "object" ? raw.specs : {}) as Record<string, unknown>;
   const specs: Partial<Record<SpecKey, string>> = {};
   for (const k of missing) {
     const v = str(rawSpecs[k]).slice(0, 80);
     if (v) specs[k] = v;
   }
-  return { content: toListing(raw, m), specs };
+  return { content, specs };
 }
 
 /** Short free-form text from the connected model (review replies and other drafts). */
