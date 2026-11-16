@@ -14,6 +14,47 @@ const ANGLE_LABEL: Record<Angle, string> = { front: "Front (main)", side: "Side"
 const PRESET_IDS = Object.keys(IMAGE_PRESETS) as PresetId[];
 const slug = (s: string) => s.trim().replace(/\.[a-z0-9]+$/i, "").replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "image";
 
+async function imageAsBase64(file: File): Promise<string> {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(512 / bitmap.width, 512 / bitmap.height, 1);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const context = canvas.getContext("2d");
+  if (!context) {
+    bitmap.close();
+    throw new Error("Could not prepare the reference product photo.");
+  }
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  const blob = await new Promise<Blob>((resolve, reject) =>
+    canvas.toBlob((value) => value ? resolve(value) : reject(new Error("Could not encode the reference photo.")), "image/png"),
+  );
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  }
+  return btoa(binary);
+}
+
+function anglePrompt(angle: Exclude<Angle, "front">): string {
+  const view = {
+    side: "Create a true 90-degree side profile view, showing the product's side silhouette and depth.",
+    back: "Rotate the same product to show its rear side directly, as a realistic straight-on back view.",
+    detail: "Create a close-up commercial detail shot of the same product, focusing on its real material, cap, dispenser, texture and construction.",
+  }[angle];
+  return [
+    "Use the uploaded product photo as the sole visual reference and create a photorealistic ecommerce product photograph of the exact same physical item.",
+    view,
+    "This must be a genuinely different camera angle, not another front-facing image and not a mirrored copy.",
+    "Keep the same product identity, package geometry, proportions, cap or pump, materials, colors, finish and brand styling. Do not add accessories, hands, people, props or extra products.",
+    "Do not invent readable words, numbers, ingredients, barcodes or logos on surfaces that are not visible in the reference. Keep unseen label areas visually neutral rather than fabricating text.",
+    "Show the complete product, upright and centered, on a perfectly uniform pure white #FFFFFF background with only a very subtle contact shadow.",
+    "Square 1:1 high-end studio product photography, crisp realistic edges, neutral lighting, no watermark, no border, no scenery.",
+  ].join(" ");
+}
+
 export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
   const [shots, setShots] = useState<Shot[]>([]);
   const [tolerance, setTolerance] = useState(40);
@@ -25,6 +66,9 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
   const [message, setMessage] = useState("");
   const [dragging, setDragging] = useState(false);
   const [modelError, setModelError] = useState(false);
+  const [angleTargets, setAngleTargets] = useState<Exclude<Angle, "front">[]>(["side", "back", "detail"]);
+  const [generatingAngles, setGeneratingAngles] = useState(false);
+  const [angleStatus, setAngleStatus] = useState("");
   const shotsRef = useRef<Shot[]>([]);
   const running = useRef(false);
   const settings = useRef({ tolerance, fill });
@@ -78,6 +122,52 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
         angle: ANGLES[Math.min(list.length + i, 3)],
       })),
     ]);
+  };
+
+
+  const generateAngles = async () => {
+    const source = shots.find((shot) => shot.angle === "front") ?? shots[0];
+    if (!source || angleTargets.length === 0 || generatingAngles) return;
+    setGeneratingAngles(true);
+    setMessage("");
+    try {
+      const image_b64 = await imageAsBase64(source.file);
+      for (const angle of angleTargets) {
+        setAngleStatus(`Generating ${ANGLE_LABEL[angle]} view…`);
+        const response = await fetch("/api/ai-ad/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: anglePrompt(angle), image_b64, image_type: "image/png" }),
+        });
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({}));
+          throw new Error(payload.error || `Could not generate the ${ANGLE_LABEL[angle]} view.`);
+        }
+        const blob = await response.blob();
+        if (!blob.size || !blob.type.startsWith("image/")) {
+          throw new Error(`AI returned an invalid ${ANGLE_LABEL[angle]} image.`);
+        }
+        const generatedFile = new File([blob], `${slug(sku || source.file.name)}-${angle}.png`, { type: "image/png" });
+        const generatedShot: Shot = {
+          id: `${Date.now()}-${angle}-${Math.random().toString(36).slice(2, 8)}`,
+          file: generatedFile,
+          original: URL.createObjectURL(generatedFile),
+          preview: null,
+          cut: null,
+          flags: [],
+          state: "queued",
+          angle,
+        };
+        setShots((list) => [...list, generatedShot]);
+      }
+      setAngleStatus("");
+      setMessage(`Generated ${angleTargets.length} new angle view(s). They are being cleaned and will be included in your ZIP.`);
+    } catch (error) {
+      setAngleStatus("");
+      setMessage(error instanceof Error ? error.message : "Could not generate the additional product angles.");
+    } finally {
+      setGeneratingAngles(false);
+    }
   };
 
   const remove = (id: string) =>
@@ -166,7 +256,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
             <ImagePlus size={22} aria-hidden />
           </span>
           <span className="font-display text-base font-medium text-ink">Drop product photos here, or choose files</span>
-          <span className="max-w-md text-[13px] leading-relaxed text-mute">JPEG, PNG or WebP. Photos are processed in your browser and never leave this computer.</span>
+          <span className="max-w-md text-[13px] leading-relaxed text-mute">{mode === "shots" ? "JPEG, PNG or WebP. Cleanup runs locally; the selected reference photo is sent to Cloudflare only when you generate new AI angles." : "JPEG, PNG or WebP. Photos are processed in your browser and never leave this computer."}</span>
           <input type="file" accept="image/*" multiple className="sr-only" onChange={(e) => { add(e.target.files); e.target.value = ""; }} />
         </label>
 
@@ -234,7 +324,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
         <div>
           <h2 className="h-section">{mode === "cleanup" ? "Output" : "Product and marketplaces"}</h2>
           <p className="mt-1 text-[13px] leading-relaxed text-mute">
-            {mode === "cleanup" ? "Automatic Amazon main-image cleanup: remove the background, center the original product on pure white, and export a 2000 × 2000 image with the product filling 85% of the frame. " : "Upload the front, side and back photos you shot. Nothing is generated: every shot is your own photo, cleaned. "}
+            {mode === "cleanup" ? "Automatic Amazon main-image cleanup: remove the background, center the original product on pure white, and export a 2000 × 2000 image with the product filling 85% of the frame. " : "Upload one clear Front photo, choose Side, Back or Detail, and generate new AI angle views from the same product reference. "}
             The cut-out runs in your browser with an open-source AI model. The first photo takes longer while the model downloads, then allow 10 to 20 seconds per photo.
           </p>
         </div>
@@ -244,6 +334,24 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
             <div>
               <label className="label" htmlFor="im-sku">SKU or ASIN</label>
               <input id="im-sku" className="field" value={sku} maxLength={40} placeholder="Used in the file names" autoComplete="off" onChange={(e) => setSku(e.target.value)} />
+            </div>
+            <div className="rounded-xl border border-line bg-sage-soft p-3.5">
+              <h3 className="text-sm font-semibold text-ink">Generate other product angles</h3>
+              <p className="mt-1 text-xs leading-relaxed text-mute">Use your Front photo as the reference. AI will create new Side, Back and Detail views, then clean their backgrounds automatically.</p>
+              <div className="mt-3 flex flex-wrap gap-3">
+                {(["side", "back", "detail"] as const).map((angle) => (
+                  <label key={angle} className="flex items-center gap-2 text-sm text-ink">
+                    <input type="checkbox" className="size-4 accent-flow-green" checked={angleTargets.includes(angle)} onChange={(event) => setAngleTargets((current) => event.target.checked ? [...current, angle] : current.filter((item) => item !== angle))} />
+                    {ANGLE_LABEL[angle]}
+                  </label>
+                ))}
+              </div>
+              <button type="button" className="btn btn-primary mt-3 w-full" onClick={generateAngles} disabled={shots.length === 0 || angleTargets.length === 0 || generatingAngles}>
+                {generatingAngles ? <Loader2 size={16} className="animate-spin" aria-hidden /> : <ImagePlus size={16} aria-hidden />}
+                {generatingAngles ? "Generating angles…" : "Generate selected angles"}
+              </button>
+              {angleStatus && <p role="status" className="mt-2 text-xs text-mute">{angleStatus}</p>}
+              <p className="mt-2 text-[11px] leading-relaxed text-mute">Important: views of hidden packaging surfaces are AI reconstructions. Check any unseen label text before publishing.</p>
             </div>
             <fieldset className="min-w-0">
               <legend className="label">Export for</legend>
