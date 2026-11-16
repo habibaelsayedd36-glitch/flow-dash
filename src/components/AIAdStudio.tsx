@@ -67,11 +67,22 @@ export function AIAdStudio() {
       // The original product is composited locally, so Cloud AI creates only a compliant white background.
       const prompt = "Create a perfectly clean, seamless pure white ecommerce photography background, RGB 255 255 255, evenly illuminated edge to edge. Square professional product photography studio, subtle natural contact shadow only at the bottom center, neutral softbox lighting, no visible horizon, no gradient, no texture, no platform, no props, no decorations. Keep the center completely empty and uniformly white because the real product will be composited there afterward. This is an Amazon marketplace MAIN image background, not a lifestyle advertisement. Absolutely no objects, no product, no bottle, no packaging, no flowers, no leaves, no scenery, no people, no text, no letters, no logo, no badges, no border, no watermark. Photorealistic high-key commercial studio lighting.";
       setProgress(10);
-      const response = await fetch("/api/ai-ad/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt }),
-      });
+      const controller = new AbortController();
+      const requestTimer = window.setTimeout(() => controller.abort(), 55_000);
+      let response: Response;
+      try {
+        response = await fetch("/api/ai-ad/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt }),
+          signal: controller.signal,
+        });
+      } catch (requestError) {
+        if (controller.signal.aborted) throw new Error("Cloud image generation took too long. Please try again in a moment.");
+        throw requestError;
+      } finally {
+        window.clearTimeout(requestTimer);
+      }
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
         throw new Error(payload.error || "Cloud image generation failed.");
@@ -79,13 +90,18 @@ export function AIAdStudio() {
       setProgress(65);
       setStatus("AI created the background. Preparing your product photo…");
       const generatedBlob = await response.blob();
+      if (!generatedBlob.size || !generatedBlob.type.startsWith("image/")) {
+        throw new Error("Cloud AI returned an invalid image. Please try again.");
+      }
 
-      setStatus("Placing your original product into the scene…");
-      const [background, product] = await Promise.all([
-        createImageBitmap(generatedBlob),
-        cutout(file, 28),
-      ]);
+      setStatus("Removing the original photo background and preserving the product…");
+      setProgress(72);
+      const product = await cutout(file, 28);
       if (!product.productPx) throw new Error("Could not detect the product. Try a clearer photo with the full product visible.");
+
+      setStatus("Compositing your original product onto the Amazon background…");
+      setProgress(88);
+      const background = await createImageBitmap(generatedBlob);
       const canvas = document.createElement("canvas");
       canvas.width = 2000;
       canvas.height = 2000;
@@ -120,6 +136,7 @@ export function AIAdStudio() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong while creating the ad.");
       setStatus("");
+      setProgress(0);
     } finally {
       setBusy(false);
     }
@@ -192,7 +209,7 @@ export function AIAdStudio() {
           {busy ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
           {busy ? "Creating your ad…" : "Generate AI ad"}
         </button>
-        {busy && <div className="space-y-2"><div className="h-2 overflow-hidden rounded-full bg-sage-soft"><div className="h-full rounded-full bg-forest transition-all" style={{ width: progress + "%" }} /></div><p className="text-xs leading-relaxed text-mute">{status || "Working locally on your device…"}</p></div>}
+        {busy && <div className="space-y-2" aria-live="polite"><div className="h-2 overflow-hidden rounded-full bg-sage-soft"><div className="h-full rounded-full bg-forest transition-all" style={{ width: progress + "%" }} /></div><p className="text-xs leading-relaxed text-mute">{status || "Working…"}</p><p className="text-[11px] text-mute">Keep this tab open while the image is being prepared.</p></div>}
         {error && <p role="alert" className="rounded-xl bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
         <div className="border-t border-line pt-4 text-xs leading-relaxed text-mute">
           Amazon main-image preset · Pure white background · Original product preserved · 2000 × 2000 px export. Cloud AI generates the background; product placement stays in your browser.
