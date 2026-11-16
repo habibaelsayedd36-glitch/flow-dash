@@ -17,8 +17,8 @@ export const FIELDS = [
   { key: "weight", label: "Weight", hints: ["weight", "الوزن", "وزن"] },
   { key: "dimensions", label: "Dimensions", hints: ["dimension", "dims", "l x w", "الأبعاد", "ابعاد"] },
   { key: "origin", label: "Country of origin", hints: ["origin", "made in", "country", "بلد", "المنشأ"] },
-  { key: "features", label: "Features / description (English)", hints: ["features en", "feature en", "description en", "details en", "features", "feature", "description", "details", "specs", "notes", "الوصف", "مميزات", "ملاحظات", "تفاصيل"] },
   { key: "featuresAr", label: "Features / description (Arabic)", hints: ["features ar", "arabic features", "description ar", "مميزات عربي", "وصف عربي", "تفاصيل عربي"] },
+  { key: "features", label: "Features / description (English)", hints: ["features en", "feature en", "description en", "details en", "features", "feature", "description", "details", "specs", "notes", "الوصف", "مميزات", "ملاحظات", "تفاصيل"] },
   { key: "keywords", label: "Target keywords", hints: ["keywords", "search terms", "target terms", "كلمات مفتاحية", "كلمات البحث"] },
 ] as const;
 
