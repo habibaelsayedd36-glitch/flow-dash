@@ -62,9 +62,20 @@ export function AIAdStudio() {
     setPreview((current) => { if (current) URL.revokeObjectURL(current); return ""; });
     setProgress(0);
     try {
-      setStatus("Preparing the original product photo…");
+      setProgress(5);
+      setStatus("Loading the background-removal model and preparing your product…");
       // Keep the real product and every printed character outside generative AI.
-      const product = await cutout(file, 35);
+      // Fail visibly instead of leaving the Generate button spinning forever
+      // when the model CDN or local inference gets stuck.
+      const product = await Promise.race([
+        cutout(file, 35),
+        new Promise<never>((_, reject) =>
+          window.setTimeout(
+            () => reject(new Error("Product preparation is taking too long. Check your connection and try a smaller, clearer product photo.")),
+            55_000,
+          ),
+        ),
+      ]);
       if (product.flags.includes("nothing_found") || product.productPx === 0) {
         throw new Error("Could not isolate the product. Try a clearer photo with a plain, contrasting background.");
       }
