@@ -137,7 +137,7 @@ export async function processJobItemAction(jobId: number, index: number): Promis
     dimensions: "Confirmed dimensions",
     origin: "Confirmed country of origin",
   };
-  const featureLines = (s.features ?? "").split(/[;|\\n\\u2022]+/).map((x) => x.trim()).filter(Boolean);
+  const featureLines = (s.features ?? "").split(/[;|\n\u2022]+/).map((x) => x.trim()).filter(Boolean);
   const confirmedSpecLines = Object.entries(known).map(([key, value]) => `${specLabels[key as SpecKey]}: ${value}`);
   const brief: ProductBrief = {
     name: s.name || s.nameAr || "",
@@ -145,9 +145,9 @@ export async function processJobItemAction(jobId: number, index: number): Promis
     brand: s.brand ?? "",
     category: job.productType || "general",
     // Include every mapped fact and both language feature fields in the AI brief.
-    features: [...featureLines, ...confirmedSpecLines].join("\\n"),
-    featuresAr: (s.featuresAr ?? "").split(/[;|\\n\\u2022]+/).map((x) => x.trim()).filter(Boolean).join("\\n"),
-    keywords: (s.keywords ?? "").split(/[,،;|\\n]+/).map((x) => x.trim()).filter(Boolean).join(", "),
+    features: [...featureLines, ...confirmedSpecLines].join("\n"),
+    featuresAr: (s.featuresAr ?? "").split(/[;|\n\u2022]+/).map((x) => x.trim()).filter(Boolean).join("\n"),
+    keywords: (s.keywords ?? "").split(/[,،;|\n]+/).map((x) => x.trim()).filter(Boolean).join(", "),
   };
   const unknown = SPEC_KEYS.filter((k) => !known[k]);
 
