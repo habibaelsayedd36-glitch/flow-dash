@@ -239,7 +239,7 @@ function retryDelayMs(res: Response, data: unknown, attempt: number): number {
   }
 
   // Some providers put the exact wait time only in the error message.
-  const wait = errorMessage.match(/(?:try again|retry) in\s+([\d.]+)\s*(ms|seconds?|s)\\b/i);
+  const wait = errorMessage.match(/(?:try again|retry) in\s+([\d.]+)\s*(ms|seconds?|s)\b/i);
   if (wait) {
     const multiplier = wait[2].toLowerCase().startsWith("ms") ? 1 : 1000;
     return Math.min(30_000, Math.max(250, Number(wait[1]) * multiplier));
@@ -384,7 +384,6 @@ Required JSON shape:
 
 export async function generateWithAi(p: AiProvider, brief: ProductBrief, m: Marketplace, tone: string, notes: string): Promise<ListingContent> {
   const tail = `Return exactly this JSON shape:\n{${LISTING_SHAPE}}`;
-  const text = await callModel(p, SYSTEM, userPrompt(brief, m, tone, notes, tail), true);
   const content = toListing(await callListingJson(p, SYSTEM, userPrompt(brief, m, tone, notes, tail)), m);
   return repairShortBullets(p, brief, m, content, tail);
 }
