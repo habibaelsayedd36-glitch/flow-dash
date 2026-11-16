@@ -24,6 +24,7 @@ import {
 } from "@/lib/catalog";
 import { briefOf, checkQuota, emit, moveProductStage, produceListing, runScheduledChecks, type RunResult } from "@/lib/engine";
 import { LOCALE_COOKIE } from "@/lib/locale";
+import { getAiProvider, generateText } from "@/lib/ai";
 import { scoreListing, type ListingContent } from "@/lib/rules";
 
 export type FormState = { ok?: boolean; error?: "required" | "market" | "failed"; ran?: number };
@@ -170,6 +171,53 @@ export async function bulkGenerateListingsAction(productIds: number[], marketpla
   }
   refresh();
   return { ok: results.length > 0 && results.every((r) => !r.error), results };
+}
+
+export type AutoBriefResult = { ok: boolean; features?: string; featuresAr?: string; keywords?: string; error?: string };
+
+/** Fill missing product brief fields from confirmed product/listing facts using the connected AI provider. */
+export async function autoGenerateListingBriefAction(listingId: number): Promise<AutoBriefResult> {
+  await ensureDb();
+  const [row] = await db.select({ product: products, listing: listings }).from(listings)
+    .innerJoin(products, eq(listings.productId, products.id)).where(eq(listings.id, listingId));
+  if (!row) return { ok: false, error: "Product not found." };
+  const provider = await getAiProvider();
+  if (!provider) return { ok: false, error: "Connect an AI provider in Settings to generate these fields automatically." };
+  try {
+    const p = row.product;
+    const l = row.listing;
+    const raw = await generateText(
+      provider,
+      "You are a careful e-commerce product researcher. Return valid JSON only. Use only the facts supplied. Never invent materials, sizes, ingredients, certifications, performance claims, or product specifications. If facts are insufficient, return fewer features rather than guessing. Arabic must be natural Modern Standard Arabic.",
+      `Create a concise product brief for marketplace listing generation.
+Product name EN: ${p.name}
+Product name AR: ${p.nameAr || "(not provided)"}
+Brand: ${p.brand || "(not provided)"}
+Category: ${p.category}
+Existing confirmed features EN: ${p.features || "(none)"}
+Existing confirmed features AR: ${p.featuresAr || "(none)"}
+Existing keywords: ${p.keywords || "(none)"}
+Current listing title EN: ${l.titleEn}
+Current listing title AR: ${l.titleAr}
+Current listing bullets EN: ${(l.bulletsEn || []).join(" | ")}
+Current listing bullets AR: ${(l.bulletsAr || []).join(" | ")}
+Current descriptions EN: ${l.descriptionEn}
+Current descriptions AR: ${l.descriptionAr}
+Return JSON with exactly:
+{"featuresEn":["feature 1","feature 2"],"featuresAr":["ميزة 1","ميزة 2"],"keywords":["keyword 1","keyword 2"]}
+Features must be short factual points, one per array item. Keywords must be relevant search phrases, comma-separated when displayed. Do not include brand-only or generic marketplace words.`
+    );
+    const start = raw.indexOf("{"), end = raw.lastIndexOf("}");
+    if (start < 0 || end <= start) throw new Error("AI returned an invalid response.");
+    const parsed = JSON.parse(raw.slice(start, end + 1)) as Record<string, unknown>;
+    const lines = (v: unknown) => Array.isArray(v) ? v.filter((x): x is string => typeof x === "string").map(x => x.trim()).filter(Boolean).slice(0, 8).join("\n") : "";
+    const features = p.features.trim() || lines(parsed.featuresEn);
+    const featuresAr = p.featuresAr.trim() || lines(parsed.featuresAr);
+    const keywords = p.keywords.trim() || (Array.isArray(parsed.keywords) ? parsed.keywords.filter((x): x is string => typeof x === "string").map(x => x.trim()).filter(Boolean).slice(0, 15).join(", ") : "");
+    return { ok: Boolean(features || featuresAr || keywords), features, featuresAr, keywords };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "AI generation failed." };
+  }
 }
 
 export type RegenerateInput = { features: string; featuresAr: string; keywords: string; marketplace: string; tone: string; notes: string };
