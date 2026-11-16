@@ -57,7 +57,7 @@ export const RULES: Record<Marketplace, MarketRule> = {
     bannedChars: "!$?_{}^¬¦",
     maxRepeat: 2,
     bullets: 5,
-    bulletMin: 75,
+    bulletMin: 76,
     bulletMax: 255,
     descMin: 0,
     descMax: 2000,
@@ -71,7 +71,7 @@ export const RULES: Record<Marketplace, MarketRule> = {
     bannedChars: "@^*#&",
     maxRepeat: 1,
     bullets: 5,
-    bulletMin: 75,
+    bulletMin: 76,
     bulletMax: 250,
     descMin: 250,
     descMax: 4000,
@@ -85,7 +85,7 @@ export const RULES: Record<Marketplace, MarketRule> = {
     bannedChars: "",
     maxRepeat: 3,
     bullets: 5,
-    bulletMin: 75,
+    bulletMin: 76,
     bulletMax: 250,
     descMin: 80,
     descMax: null,
@@ -99,7 +99,7 @@ export const RULES: Record<Marketplace, MarketRule> = {
     bannedChars: "",
     maxRepeat: 3,
     bullets: 5,
-    bulletMin: 75,
+    bulletMin: 76,
     bulletMax: 250,
     descMin: 0,
     descMax: null,
@@ -218,7 +218,7 @@ export function checkListing(c: ListingContent, m: Marketplace, brief: { brand: 
   // ---- Bullets
   const bEn = filled(c.bulletsEn);
   const bAr = filled(c.bulletsAr);
-  add("bullets_count", "error", "bullets", bEn.length >= 3 && bEn.length <= r.bullets, `${bEn.length}/${r.bullets}`);
+  add("bullets_count", "error", "bullets", bEn.length === r.bullets, `${bEn.length}/${r.bullets}`);
   const bad = [...bEn, ...bAr].filter((b) => b.length > r.bulletMax || b.length < r.bulletMin).length;
   add("bullets_len", "error", "bullets", bad === 0, `${r.bulletMin > 0 ? r.bulletMin + "–" : "≤"}${r.bulletMax}`);
   add("bullets_ar", "error", "bullets", bAr.length > 0 && bAr.length === bEn.length && bAr.every(hasArabic), `${bAr.length}/${bEn.length}`);
