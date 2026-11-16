@@ -324,7 +324,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
         <div>
           <h2 className="h-section">{mode === "cleanup" ? "Output" : "Product and marketplaces"}</h2>
           <p className="mt-1 text-[13px] leading-relaxed text-mute">
-            {mode === "cleanup" ? "Automatic Amazon main-image cleanup: remove the background, center the original product on pure white, and export a 2000 × 2000 image with the product filling 85% of the frame. " : "Upload the front, side and back photos you shot. Nothing is generated: every shot is your own photo, cleaned. "}
+            {mode === "cleanup" ? "Automatic Amazon main-image cleanup: remove the background, center the original product on pure white, and export a 2000 × 2000 image with the product filling 85% of the frame. " : "Upload one clear Front photo, choose Side, Back or Detail, and generate new AI angle views from the same product reference. "}
             The cut-out runs in your browser with an open-source AI model. The first photo takes longer while the model downloads, then allow 10 to 20 seconds per photo.
           </p>
         </div>
