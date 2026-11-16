@@ -4,7 +4,7 @@
  */
 const LOGO = "https://www.flow-agency-eg.com/assets/logos/idFIQ5KAQx_logos.png";
 
-export function Brand() {
+export function Brand(_props: { tone?: "green" | "white"; product?: "Flow" | "Space" }) {
   return (
     <img
       src={LOGO}
