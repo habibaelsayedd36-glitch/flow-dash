@@ -120,7 +120,10 @@ export function AIAdStudio() {
 
       setStatus("Removing the original photo background and preserving the product…");
       setProgress(72);
-      const product = await Promise.race([\n        cutout(file, 28),\n        new Promise<never>((_, reject) => window.setTimeout(() => reject(new Error("Product cut-out is taking too long. Try a smaller, clearer photo.")), 35_000)),\n      ]);
+      const product = await Promise.race([
+        cutout(file, 28),
+        new Promise<never>((_, reject) => window.setTimeout(() => reject(new Error("Product cut-out is taking too long. Try a smaller, clearer photo.")), 35_000)),
+      ]);
       if (!product.productPx) throw new Error("Could not detect the product. Try a clearer photo with the full product visible.");
 
       setStatus("Compositing your original product onto the Amazon background…");
