@@ -12,8 +12,10 @@ async function ensureModel(id: number) {
   if (loaded) return;
   if (!loading) {
     loading = (async () => {
+      self.postMessage({ id, type: "progress", pct: 1, message: "Checking browser GPU support…" } satisfies Progress);
       const caps = await detectCapabilities();
       if (!caps.webgpu) throw new Error("WebGPU مش مدعوم في المتصفح أو كارت الشاشة.");
+      self.postMessage({ id, type: "progress", pct: 3, message: "Preparing SD-Turbo model (first download is about 2.4 GB)…" } satisfies Progress);
       const result = await loadModel("sd-turbo", {
         backendPreference: ["webgpu"],
         tokenizerProvider: async () => {
