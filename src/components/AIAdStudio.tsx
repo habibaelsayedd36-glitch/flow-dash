@@ -63,12 +63,36 @@ export function AIAdStudio() {
     setProgress(0);
     try {
       setStatus("Connecting to Cloudflare AI…");
-      // Universal Amazon main-image background prompt for every product category.
-      // The original product is composited locally, so Cloud AI creates only a compliant white background.
-      const prompt = "Create a perfectly clean, seamless pure white ecommerce photography background, RGB 255 255 255, evenly illuminated edge to edge. Square professional product photography studio, subtle natural contact shadow only at the bottom center, neutral softbox lighting, no visible horizon, no gradient, no texture, no platform, no props, no decorations. Keep the center completely empty and uniformly white because the real product will be composited there afterward. This is an Amazon marketplace MAIN image background, not a lifestyle advertisement. Absolutely no objects, no product, no bottle, no packaging, no flowers, no leaves, no scenery, no people, no text, no letters, no logo, no badges, no border, no watermark. Photorealistic high-key commercial studio lighting.";
+      // Universal Amazon main-image prompt, tailored to the selected product category and photography finish.
+      // Cloudflare creates only the compliant studio background; FLOW preserves and composites the real product.
+      const categoryGuidance: Record<Category, string> = {
+        beauty: "soft precise beauty-product studio lighting, controlled reflections, clean cosmetic campaign finish",
+        electronics: "crisp technical studio lighting, controlled reflections, sharp clean edges",
+        fashion: "accurate fabric and material presentation, balanced softbox lighting",
+        food: "fresh high-key commercial lighting, natural color balance, hygienic clean presentation",
+        home: "balanced architectural studio lighting, realistic material rendering",
+        general: "neutral commercial product-photography lighting, accurate color balance",
+      };
+      const styleGuidance: Record<Style, string> = {
+        luxury: "premium luxury studio lighting with refined controlled highlights",
+        minimal: "bright minimal high-key studio lighting",
+        nature: "soft daylight-balanced studio lighting, without adding plants or scenery",
+        studio: "professional three-point studio lighting",
+        lifestyle: "clean editorial-quality studio lighting, while keeping the background pure white",
+      };
+      const prompt = [
+        "Generate a seamless, evenly illuminated pure white RGB 255,255,255 background for an Amazon marketplace MAIN product image.",
+        "Square 1:1 high-key professional commercial photography studio, neutral white from edge to edge, no horizon, no gradient, no texture.",
+        categoryGuidance[category],
+        styleGuidance[style],
+        "Keep the entire center empty and uniformly white. The real, unchanged product photo will be composited over this background by the application.",
+        "No product, objects, props, platforms, flowers, leaves, scenery, people, text, letters, logos, badges, borders or watermark.",
+        "Photorealistic, clean, sharp, premium studio image. Strict Amazon main-image white-background presentation.",
+        extra.trim() ? "Additional visual direction (must not introduce objects or change the white background): " + extra.trim() : "",
+      ].filter(Boolean).join(" ");
       setProgress(10);
       const controller = new AbortController();
-      const requestTimer = window.setTimeout(() => controller.abort(), 55_000);
+      const requestTimer = window.setTimeout(() => controller.abort(), 42_000);
       let response: Response;
       try {
         response = await fetch("/api/ai-ad/generate", {
@@ -78,7 +102,7 @@ export function AIAdStudio() {
           signal: controller.signal,
         });
       } catch (requestError) {
-        if (controller.signal.aborted) throw new Error("Cloud image generation took too long. Please try again in a moment.");
+        if (controller.signal.aborted) throw new Error("Cloudflare is taking too long to generate this image. Please try again.");
         throw requestError;
       } finally {
         window.clearTimeout(requestTimer);
@@ -96,7 +120,7 @@ export function AIAdStudio() {
 
       setStatus("Removing the original photo background and preserving the product…");
       setProgress(72);
-      const product = await cutout(file, 28);
+      const product = await Promise.race([\n        cutout(file, 28),\n        new Promise<never>((_, reject) => window.setTimeout(() => reject(new Error("Product cut-out is taking too long. Try a smaller, clearer photo.")), 35_000)),\n      ]);
       if (!product.productPx) throw new Error("Could not detect the product. Try a clearer photo with the full product visible.");
 
       setStatus("Compositing your original product onto the Amazon background…");
