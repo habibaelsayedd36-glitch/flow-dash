@@ -1,15 +1,26 @@
 /**
  * Official full FLOW Agency lockup from the website footer.
- * Keep the original artwork unchanged.
+ * Preserve the exact artwork and apply the dashboard's official brand green.
  */
 const LOGO = "https://www.flow-agency-eg.com/assets/logo/flow-lockup-white.png";
 
 export function Brand(_props: { tone?: "green" | "white"; product?: "Flow" | "Space" }) {
   return (
-    <img
-      src={LOGO}
-      alt="FLOW Agency"
-      className="h-10 w-auto max-w-[180px] object-contain object-left"
+    <span
+      role="img"
+      aria-label="FLOW Agency"
+      className="block h-10 w-[180px] shrink-0"
+      style={{
+        backgroundColor: "#143c28",
+        WebkitMaskImage: `url(${LOGO})`,
+        maskImage: `url(${LOGO})`,
+        WebkitMaskRepeat: "no-repeat",
+        maskRepeat: "no-repeat",
+        WebkitMaskPosition: "left center",
+        maskPosition: "left center",
+        WebkitMaskSize: "contain",
+        maskSize: "contain",
+      }}
     />
   );
 }
