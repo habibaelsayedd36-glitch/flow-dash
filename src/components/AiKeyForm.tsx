@@ -81,7 +81,7 @@ export function AiKeyForm({ providers, current }: { providers: ProviderOpt[]; cu
               aria-describedby="ai-key-help"
             />
             <p id="ai-key-help" className="mt-1.5 text-[13px] leading-relaxed text-mute">
-              Create a key in the Anthropic Console, the OpenAI Platform or Google AI Studio. Leave the model empty to use {selected.defaultModel}; if your provider rejects that
+              Create a key in the Anthropic Console, OpenAI Platform, Google AI Studio or Groq Console. Groq offers a free usage tier. Leave the model empty to use {selected.defaultModel}; if your provider rejects that
               name, type the model your account offers.
             </p>
             {state.error && <p role="alert" className="mt-1.5 text-[13px] text-danger">{state.error}</p>}
