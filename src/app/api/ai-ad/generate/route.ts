@@ -27,6 +27,7 @@ export async function POST(request: NextRequest) {
       `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${MODEL}`,
       {
         method: "POST",
+        signal: AbortSignal.timeout(45_000),
         headers: { Authorization: `Bearer ${apiToken}`, "Content-Type": "application/json" },
         body: JSON.stringify({ prompt, steps: 4 }),
         cache: "no-store",
@@ -52,9 +53,10 @@ export async function POST(request: NextRequest) {
       headers: { "Content-Type": "image/jpeg", "Cache-Control": "no-store", "Content-Length": String(image.byteLength) },
     });
   } catch (error) {
+    const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unexpected image generation error." },
-      { status: 500 },
+      { error: timedOut ? "Cloudflare image generation timed out. Please try again." : error instanceof Error ? error.message : "Unexpected image generation error." },
+      { status: timedOut ? 504 : 500 },
     );
   }
 }
