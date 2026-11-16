@@ -65,15 +65,12 @@ export function AIAdStudio() {
       setStatus("Connecting to Cloudflare AI…");
       // Use the uploaded photo as an image reference so the model can improve the actual composition, lighting and presentation.
       const prompt = [
-        "Edit the provided product photograph into a premium Amazon-ready commercial product photo.",
-        "Use the uploaded image as the exact visual reference. Preserve the same product identity, packaging silhouette, brand colors, logo and label as faithfully as possible.",
-        "Improve the product presentation: correct perspective and alignment, make the product upright and visually centered, refine exposure, white balance, contrast, color accuracy, sharpness and realistic studio lighting.",
-        "Create a seamless pure white RGB 255,255,255 background, subtle natural contact shadow, clean high-end ecommerce studio photography.",
-        "Keep the entire product visible, proportional and dominant, with no cropping, extra objects, added text, invented accessories, fake logos or watermark.",
-        "Square 1:1 Amazon main image, photorealistic, crisp professional quality.",
-        "Category: " + category + ". Visual finish: " + style + ".",
-        extra.trim() ? "Additional direction: " + extra.trim() : "",
-      ].filter(Boolean).join(" ");
+        "Create a clean, realistic commercial product photograph based on the supplied reference image.",
+        "Show the same ordinary retail product, upright and centered, with its packaging and visible design kept as close to the reference as possible.",
+        "Use even professional studio lighting, accurate natural colors, clear focus, a plain pure white background and a soft realistic contact shadow.",
+        "Keep the complete item in frame. Do not add people, hands, props, extra objects, decorative text or watermarks.",
+        "Square ecommerce product photo.",
+      ].join(" ");
       setProgress(12);
       setStatus("Sending your original product photo to Cloudflare image editing…");
       const bytes = new Uint8Array(await file.arrayBuffer());
