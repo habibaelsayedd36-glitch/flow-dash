@@ -14,7 +14,11 @@ const cairo = Cairo({ subsets: ["arabic", "latin"], variable: "--font-cairo", di
 export const metadata: Metadata = {
   title: { default: "Flow Dashboard", template: "%s · Flow Dashboard" },
   description: "Run the agency in one place.",
-  icons: { icon: "https://www.flow-agency-eg.com/assets/logos/Symbol.png" },
+  icons: {
+    icon: [{ url: "https://www.flow-agency-eg.com/assets/logos/Symbol.png", type: "image/png" }],
+    shortcut: "https://www.flow-agency-eg.com/assets/logos/Symbol.png",
+    apple: "https://www.flow-agency-eg.com/assets/logos/Symbol.png",
+  },
   robots: { index: false, follow: false },
 };
 
