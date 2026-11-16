@@ -1,14 +1,14 @@
 /**
- * Use the exact combined FLOW logo asset linked from the official website.
- * Do not recolor, recreate, add badges, or alter the lockup.
+ * Official full FLOW Agency lockup from the website footer.
+ * Keep the original artwork unchanged.
  */
-const LOGO = "https://www.flow-agency-eg.com/assets/logos/idFIQ5KAQx_logos.png";
+const LOGO = "https://www.flow-agency-eg.com/assets/logo/flow-lockup-white.png";
 
 export function Brand(_props: { tone?: "green" | "white"; product?: "Flow" | "Space" }) {
   return (
     <img
       src={LOGO}
-      alt="FLOW"
+      alt="FLOW Agency"
       className="h-10 w-auto max-w-[180px] object-contain object-left"
     />
   );
