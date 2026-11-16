@@ -127,18 +127,28 @@ export async function processJobItemAction(jobId: number, index: number): Promis
 
   const m = isMarketplace(job.marketplace) ? job.marketplace : "amazon";
   const s = item.source;
+  const known: Partial<Record<SpecKey, string>> = {};
+  for (const k of SPEC_KEYS) if (s[k]) known[k] = s[k];
+  const specLabels: Record<SpecKey, string> = {
+    color: "Confirmed color",
+    size: "Confirmed size",
+    material: "Confirmed material",
+    weight: "Confirmed weight",
+    dimensions: "Confirmed dimensions",
+    origin: "Confirmed country of origin",
+  };
+  const featureLines = (s.features ?? "").split(/[;|\\n\\u2022]+/).map((x) => x.trim()).filter(Boolean);
+  const confirmedSpecLines = Object.entries(known).map(([key, value]) => `${specLabels[key as SpecKey]}: ${value}`);
   const brief: ProductBrief = {
     name: s.name || s.nameAr || "",
     nameAr: s.nameAr ?? "",
     brand: s.brand ?? "",
     category: job.productType || "general",
-    // Sheets usually pack features into one cell: "350 ml; dishwasher safe; matte finish".
-    features: (s.features ?? "").split(/[;|\n\u2022]+/).map((x) => x.trim()).filter(Boolean).join("\n"),
-    featuresAr: "",
-    keywords: "",
+    // Include every mapped fact and both language feature fields in the AI brief.
+    features: [...featureLines, ...confirmedSpecLines].join("\\n"),
+    featuresAr: (s.featuresAr ?? "").split(/[;|\\n\\u2022]+/).map((x) => x.trim()).filter(Boolean).join("\\n"),
+    keywords: (s.keywords ?? "").split(/[,،;|\\n]+/).map((x) => x.trim()).filter(Boolean).join(", "),
   };
-  const known: Partial<Record<SpecKey, string>> = {};
-  for (const k of SPEC_KEYS) if (s[k]) known[k] = s[k];
   const unknown = SPEC_KEYS.filter((k) => !known[k]);
 
   const out: JobItem = { source: s, status: "done", engine: "template", specs: { ...known }, estimated: [], missing: [...unknown], notes: [] };
