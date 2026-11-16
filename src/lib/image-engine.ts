@@ -80,8 +80,8 @@ function makeCanvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingCo
 }
 
 /**
- * strength 0–100: how firmly faint matte (soft shadow leftovers) is cut away.
- * Higher removes more shadow but trims soft product edges such as fur or glass.
+ * strength 0–100: balanced removal of faint matte and background residue.
+ * Keep the default modest so fine edges, transparent-looking parts and textures survive.
  */
 export async function cutout(file: Blob, strength: number): Promise<Cutout> {
   let model: Imgly;
@@ -105,7 +105,7 @@ export async function cutout(file: Blob, strength: number): Promise<Cutout> {
   // and stretch what is left so solid areas stay fully opaque.
   const img = ctx.getImageData(0, 0, w, h);
   const d = img.data;
-  const floor = 40 + (Math.min(100, Math.max(0, strength)) / 100) * 150;
+  const floor = 24 + (Math.min(100, Math.max(0, strength)) * 0.8);
   const gain = 255 / Math.max(1, 235 - floor);
   let minX = w;
   let minY = h;
