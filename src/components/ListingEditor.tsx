@@ -190,10 +190,6 @@ export function ListingEditor(props: {
   };
 
   const autoFixCompliance = async () => {
-    if (!aiModel) {
-      setNotice("Connect an AI provider in Settings to fix listing compliance automatically.");
-      return;
-    }
     setBusy("regen");
     setNotice("");
     let nextContent = content;
@@ -201,7 +197,10 @@ export function ListingEditor(props: {
     let remaining = checks.filter((c) => !c.pass);
 
     // Give the model up to three attempts, feeding it the exact checks that still fail.
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    // Without a connected provider, regenerateListingAction uses FLOW's built-in
+    // deterministic template engine. Run it once; AI providers may refine up to 3 times.
+    const maxAttempts = aiModel ? 3 : 1;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       const correctionNotes = remaining.length
         ? `Automatically fix every failed marketplace compliance check: ${remaining.map((c) => `${t.check[c.id]} ${c.detail ? `(${c.detail})` : ""}`).join("; ")}. Keep all claims strictly grounded in the product facts. Ensure English and Arabic bullets match one-to-one.`
         : "Create a fully marketplace-compliant bilingual listing using only the supplied product facts.";
@@ -398,12 +397,12 @@ export function ListingEditor(props: {
                   <p className="mt-0.5 text-sm text-mute">{passed === checks.length ? t.editor.allGood : tpl(t.editor.passed, { a: passed, b: checks.length })}</p>
                 </div>
               </div>
-              <button type="button" className="btn btn-primary btn-sm" onClick={autoFixCompliance} disabled={disabled || passed === checks.length || !aiModel} title={!aiModel ? "Connect an AI provider in Settings first" : "Automatically rewrite and recheck the listing"}>
+              <button type="button" className="btn btn-primary btn-sm" onClick={autoFixCompliance} disabled={disabled || passed === checks.length} title="Automatically fix what can be corrected from the saved product facts and recheck compliance">
                 {busy === "regen" ? <Loader2 size={15} className="animate-spin" aria-hidden /> : <Sparkles size={15} aria-hidden />}
                 {busy === "regen" ? "Fixing…" : "Auto-Fix"}
               </button>
             </div>
-            {!aiModel && <p className="mt-3 text-xs text-amber-ink">Connect an AI provider in Settings to enable automatic compliance fixes.</p>}
+            {!aiModel && <p className="mt-3 text-xs text-mute">No API key needed. Auto-Fix uses FLOW's built-in rules and saved product facts; missing product information or Arabic translations may still need your review.</p>}
             <ul className="mt-5 flex flex-col gap-2.5">
               {sorted.map((c) => (
                 <li key={c.id} className="flex gap-2.5 text-[13px] leading-snug">
