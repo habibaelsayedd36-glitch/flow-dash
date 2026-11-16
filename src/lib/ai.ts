@@ -11,13 +11,14 @@ import { RULES, type ListingContent, type ProductBrief } from "./rules";
  * and callers fall back to the template engine — nothing here fabricates output.
  */
 
-export type ProviderId = "anthropic" | "openai" | "gemini";
+export type ProviderId = "anthropic" | "openai" | "gemini" | "groq";
 export type AiProvider = { id: ProviderId; label: string; model: string; key: string; source: "env" | "settings" };
 
 export const PROVIDERS: Record<ProviderId, { label: string; defaultModel: string }> = {
   anthropic: { label: "Anthropic Claude", defaultModel: "claude-sonnet-5-5" },
   openai: { label: "OpenAI", defaultModel: "gpt-5-mini" },
   gemini: { label: "Google Gemini", defaultModel: "gemini-3.8-flash" },
+  groq: { label: "Groq (Free)", defaultModel: "openai/gpt-oss-120b" },
 };
 export const isProviderId = (v: unknown): v is ProviderId => typeof v === "string" && v in PROVIDERS;
 
@@ -27,6 +28,7 @@ export async function getAiProvider(): Promise<AiProvider | null> {
     ["anthropic", process.env.ANTHROPIC_API_KEY],
     ["openai", process.env.OPENAI_API_KEY],
     ["gemini", process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY],
+    ["groq", process.env.GROQ_API_KEY],
   ];
   for (const [id, key] of env) {
     if (key) return { id, label: PROVIDERS[id].label, model: override || PROVIDERS[id].defaultModel, key, source: "env" };
@@ -183,9 +185,10 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
       p.label,
     )) as { content?: { type: string; text?: string }[] };
     text = (data.content ?? []).filter((b) => b.type === "text").map((b) => b.text ?? "").join("");
-  } else if (p.id === "openai") {
+  } else if (p.id === "openai" || p.id === "groq") {
+    const endpoint = p.id === "groq" ? "https://api.groq.com/openai/v1/chat/completions" : "https://api.openai.com/v1/chat/completions";
     const data = (await post(
-      "https://api.openai.com/v1/chat/completions",
+      endpoint,
       { authorization: `Bearer ${p.key}` },
       {
         model: p.model,
