@@ -5,8 +5,11 @@ import { seed } from "./seed";
 /**
  * Makes the app self-sufficient on a fresh database: creates the tables if
  * they are missing (DDL is exported from the Drizzle schema, see ddl.ts) and
- * loads the sample workspace once. Guarded by an advisory lock so concurrent
- * first requests cannot double-seed.
+ * loads the sample workspace once.
+ *
+ * Use a transaction-scoped advisory lock: DATABASE_URL may use Neon's
+ * transaction pooler, where session-scoped advisory locks can outlive the
+ * client checkout and block every subsequent serverless request.
  */
 
 const LOCK = 727_001;
@@ -14,8 +17,12 @@ const g = globalThis as typeof globalThis & { __flowReady?: Promise<void> };
 
 async function init(): Promise<void> {
   const client = await pool.connect();
+  let inTransaction = false;
   try {
-    await client.query("select pg_advisory_lock($1)", [LOCK]);
+    await client.query("begin");
+    inTransaction = true;
+    await client.query("select pg_advisory_xact_lock($1)", [LOCK]);
+
     const reg = await client.query<{ t: string | null }>("select to_regclass('public.clients')::text as t");
     if (!reg.rows[0]?.t) await client.query(DDL);
     // Idempotent: adds tables/columns introduced after the first release.
@@ -31,8 +38,13 @@ async function init(): Promise<void> {
         new Date().toISOString(),
       ]);
     }
+
+    await client.query("commit");
+    inTransaction = false;
+  } catch (error) {
+    if (inTransaction) await client.query("rollback").catch(() => undefined);
+    throw error;
   } finally {
-    await client.query("select pg_advisory_unlock($1)", [LOCK]).catch(() => undefined);
     client.release();
   }
 }
