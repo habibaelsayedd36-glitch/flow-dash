@@ -69,7 +69,7 @@ TITLE:
 
 BULLETS:
 - Return exactly 5 distinct bullets in each language.
-- EVERY English and Arabic bullet MUST contain at least 75 characters (including spaces), and must never exceed the selected marketplace's maximum.
+- EVERY English and Arabic bullet MUST contain at least 76 characters (including spaces), and must never exceed the selected marketplace's maximum.
 - Aim for 100–180 meaningful characters when the available product facts support it; never add filler just to reach 75 characters.
 - Each bullet must communicate one meaningful feature AND its practical customer benefit. Use different purchase considerations across the five bullets; do not repeat the same idea.
 - Prioritize: core function/use, important confirmed specification, convenience or design, compatibility/fit/use context, and another genuine differentiator — only where supported by the brief.
@@ -136,7 +136,7 @@ function rulesText(m: Marketplace): string {
     brand,
     r.bannedChars ? `Never use these characters in a title: ${[...r.bannedChars].join(" ")}` : "",
     `No word may appear more than ${r.maxRepeat} time(s) in a title (articles and prepositions excluded).`,
-    `Bullets: exactly ${r.bullets} per language, each at least 75 and at most ${r.bulletMax} characters, starting with a capital letter in English, no ending punctuation. bulletsAr must have the same count as bulletsEn. Never use filler to reach the minimum.`,
+    `Bullets: exactly ${r.bullets} per language, each at least 76 and at most ${r.bulletMax} characters, starting with a capital letter in English, no ending punctuation. bulletsAr must have the same count as bulletsEn. Never use filler to reach the minimum.`,
     `Description: ${r.descMin > 0 ? `at least ${r.descMin}` : "any length"}${r.descMax ? `, at most ${r.descMax}` : ""} characters per language, plain text.`,
     terms,
   ]
