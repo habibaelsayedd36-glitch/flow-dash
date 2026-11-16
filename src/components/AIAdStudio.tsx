@@ -73,7 +73,21 @@ export function AIAdStudio() {
       ].join(" ");
       setProgress(12);
       setStatus("Sending your original product photo to Cloudflare image editing…");
-      const bytes = new Uint8Array(await file.arrayBuffer());
+      // FLUX.2 Klein accepts reference images up to 512x512.
+      const sourceBitmap = await createImageBitmap(file);
+      const inputCanvas = document.createElement("canvas");
+      const inputScale = Math.min(512 / sourceBitmap.width, 512 / sourceBitmap.height, 1);
+      inputCanvas.width = Math.max(1, Math.round(sourceBitmap.width * inputScale));
+      inputCanvas.height = Math.max(1, Math.round(sourceBitmap.height * inputScale));
+      const inputContext = inputCanvas.getContext("2d");
+      if (!inputContext) {
+        sourceBitmap.close();
+        throw new Error("Your browser could not prepare the product image.");
+      }
+      inputContext.drawImage(sourceBitmap, 0, 0, inputCanvas.width, inputCanvas.height);
+      sourceBitmap.close();
+      const modelInputBlob = await canvasBlob(inputCanvas);
+      const bytes = new Uint8Array(await modelInputBlob.arrayBuffer());
       let binary = "";
       const chunkSize = 0x8000;
       for (let offset = 0; offset < bytes.length; offset += chunkSize) {
@@ -87,7 +101,7 @@ export function AIAdStudio() {
         response = await fetch("/api/ai-ad/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt, image_b64, image_type: file.type }),
+          body: JSON.stringify({ prompt, image_b64, image_type: "image/png" }),
           signal: controller.signal,
         });
       } catch (requestError) {
