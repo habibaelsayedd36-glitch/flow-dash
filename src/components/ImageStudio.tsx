@@ -16,7 +16,7 @@ const slug = (s: string) => s.trim().replace(/\.[a-z0-9]+$/i, "").replace(/[^A-Z
 
 export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
   const [shots, setShots] = useState<Shot[]>([]);
-  const [tolerance, setTolerance] = useState(65);
+  const [tolerance, setTolerance] = useState(40);
   const [fill, setFill] = useState(85);
   const [size, setSize] = useState(2000);
   const [sku, setSku] = useState("");
@@ -234,7 +234,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
         <div>
           <h2 className="h-section">{mode === "cleanup" ? "Output" : "Product and marketplaces"}</h2>
           <p className="mt-1 text-[13px] leading-relaxed text-mute">
-            {mode === "shots" ? "Upload the front, side and back photos you shot. Nothing is generated: every shot is your own photo, cleaned. " : ""}
+            {mode === "cleanup" ? "Automatic Amazon main-image cleanup: remove the background, center the original product on pure white, and export a 2000 × 2000 image with the product filling 85% of the frame. " : "Upload the front, side and back photos you shot. Nothing is generated: every shot is your own photo, cleaned. "}
             The cut-out runs in your browser with an open-source AI model. The first photo takes longer while the model downloads, then allow 10 to 20 seconds per photo.
           </p>
         </div>
@@ -278,9 +278,9 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
         )}
 
         <div>
-          <label className="label" htmlFor="im-tol">Shadow removal <span className="num">{tolerance}</span></label>
+          <label className="label" htmlFor="im-tol">Edge & shadow cleanup <span className="num">{tolerance}</span></label>
           <input id="im-tol" type="range" min={10} max={100} step={5} value={tolerance} onChange={(e) => setTolerance(Number(e.target.value))} className="w-full accent-flow-green" />
-          <p className="mt-1 text-xs leading-snug text-mute">Raise it if a trace of shadow remains. Lower it if soft edges such as glass or fur are being trimmed.</p>
+          <p className="mt-1 text-xs leading-snug text-mute">Balanced automatically to preserve fine product edges while removing background residue. Adjust only if needed.</p>
           <button type="button" className="btn btn-ghost btn-sm mt-2.5" onClick={reprocess} disabled={shots.length === 0 || busy}>
             <RefreshCw size={14} aria-hidden />
             Re-run with these settings
