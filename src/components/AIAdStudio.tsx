@@ -7,20 +7,20 @@ type Style = "luxury" | "minimal" | "nature" | "studio" | "lifestyle";
 type Category = "beauty" | "electronics" | "fashion" | "food" | "home" | "general";
 
 const STYLES: Record<Style, string> = {
-  luxury: "premium luxury advertising set, elegant dark stone and warm champagne accents, dramatic softbox lighting, refined reflections",
-  minimal: "clean modern minimal advertising set, soft neutral beige gradient, elegant geometric plinths, bright diffused studio lighting",
-  nature: "fresh botanical advertising set, natural leaves and subtle organic textures, sunlight rays, soft green and cream palette",
-  studio: "high-end commercial photography studio, seamless sculptural backdrop, professional three-point lighting, realistic soft shadows",
-  lifestyle: "beautiful aspirational lifestyle product photography set, tasteful interior styling, cinematic natural window light, premium editorial composition",
+  luxury: "premium luxury advertising lighting, elegant refined reflections, dramatic but balanced softbox lighting",
+  minimal: "clean modern minimal composition, bright diffused studio lighting, subtle realistic soft shadows",
+  nature: "fresh natural daylight, gentle organic lighting, delicate realistic highlights",
+  studio: "high-end commercial photography lighting, professional three-point softbox setup, realistic soft shadows",
+  lifestyle: "premium editorial product photography lighting, soft natural window-light effect, polished composition",
 };
 
 const CATEGORIES: Record<Category, string> = {
-  beauty: "premium cosmetics and skincare campaign set, elegant glass and stone props, clean spa atmosphere",
-  electronics: "premium technology product campaign set, sleek architectural surfaces, subtle LED accents",
-  fashion: "premium fashion campaign set, editorial studio environment, sophisticated textures",
-  food: "appetizing premium food advertising set, natural ingredients and tasteful serving props",
-  home: "beautiful premium homeware campaign set, curated contemporary interior, tactile materials",
-  general: "premium ecommerce product advertising set with tasteful category-neutral props",
+  beauty: "premium cosmetics and skincare product photography, clean polished presentation",
+  electronics: "premium technology product photography, crisp precise highlights",
+  fashion: "premium fashion product photography, refined editorial presentation",
+  food: "appetizing premium food product photography, fresh realistic detail",
+  home: "premium homeware product photography, refined contemporary presentation",
+  general: "premium ecommerce product photography with a clean professional presentation",
 };
 
 function canvasBlob(canvas: HTMLCanvasElement): Promise<Blob> {
@@ -74,7 +74,8 @@ export function AIAdStudio() {
         "Style direction: " + STYLES[style] + ".",
         extra.trim() ? "Additional art direction: " + extra.trim() : "",
         "Keep the entire product visible, realistic and proportional. Do not add text, logos, watermarks, hands or unrelated objects.",
-        "Square premium ecommerce advertising image, crisp professional quality.",
+        "BACKGROUND REQUIREMENT — ABSOLUTE PRIORITY: use a perfectly pure, uniform, seamless WHITE background (#FFFFFF), exactly white from edge to edge. This is a clean Amazon main product image on white. No beige, gray, cream, colored tint, gradient, texture, scenery, room, backdrop decoration, props, pedestal, platform, patterns or environmental elements. Keep only the product and its natural subtle contact shadow on the pure white background. This white-background instruction overrides every other style, category or scene direction.",
+        "Square premium ecommerce main image, crisp professional quality, pure white background (#FFFFFF).",
       ].filter(Boolean).join(" ");
       setProgress(12);
       setStatus("Sending your original product photo to Cloudflare image editing…");
