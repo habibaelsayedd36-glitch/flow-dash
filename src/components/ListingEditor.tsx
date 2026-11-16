@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Check, Copy, Info, Loader2, Plus, RefreshCw, Trash2, X, Zap } from "lucide-react";
+import { ArrowLeft, Check, Copy, Info, Loader2, Plus, RefreshCw, Sparkles, Trash2, X, Zap } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { autoGenerateListingBriefAction, regenerateListingAction, saveListingAction, setListingStatusAction } from "@/app/actions";
@@ -189,6 +189,60 @@ export function ListingEditor(props: {
     setNotice(res.ran > 0 ? tpl(t.editor.ran, { n: res.ran }) : "");
   };
 
+  const autoFixCompliance = async () => {
+    if (!aiModel) {
+      setNotice("Connect an AI provider in Settings to fix listing compliance automatically.");
+      return;
+    }
+    setBusy("regen");
+    setNotice("");
+    let nextContent = content;
+    let nextResult: Awaited<ReturnType<typeof regenerateListingAction>> | null = null;
+    let remaining = checks.filter((c) => !c.pass);
+
+    // Give the model up to three attempts, feeding it the exact checks that still fail.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const correctionNotes = remaining.length
+        ? `Automatically fix every failed marketplace compliance check: ${remaining.map((c) => `${t.check[c.id]} ${c.detail ? `(${c.detail})` : ""}`).join("; ")}. Keep all claims strictly grounded in the product facts. Ensure English and Arabic bullets match one-to-one.`
+        : "Create a fully marketplace-compliant bilingual listing using only the supplied product facts.";
+      const notes = [brief.notes, correctionNotes].filter(Boolean).join(" ").slice(0, 500);
+      const res = await regenerateListingAction(listingId, {
+        features: brief.features,
+        featuresAr: brief.featuresAr,
+        keywords: brief.keywords,
+        marketplace: brief.market,
+        tone: brief.tone,
+        notes,
+      });
+      if (!res.ok) {
+        setBusy("");
+        setNotice(t.common.failed);
+        return;
+      }
+      nextResult = res;
+      nextContent = res.content;
+      const targetMarket = isMarketplace(res.marketplace) ? res.marketplace : marketplace;
+      remaining = checkListing(nextContent, targetMarket, { brand: product.brand, keywords: brief.keywords }).filter((c) => !c.pass);
+      if (remaining.length === 0) break;
+    }
+
+    if (!nextResult) {
+      setBusy("");
+      setNotice(t.common.failed);
+      return;
+    }
+    setContent(nextContent);
+    setSaved(nextContent);
+    if (isMarketplace(nextResult.marketplace)) setMarketplace(nextResult.marketplace);
+    setOrigin({ engine: nextResult.engine, model: nextResult.model, edited: false });
+    setStatus("draft");
+    setAiError(nextResult.aiError);
+    setBusy("");
+    setNotice(remaining.length
+      ? `Auto-fix finished with ${remaining.length} check(s) still needing review. Please verify the highlighted items.`
+      : "All listing compliance checks passed. Listing saved automatically.");
+  };
+
   const copyAll = async () => {
     const parts = [content.titleEn, ...content.bulletsEn.map((b) => `• ${b}`), content.descriptionEn, "", content.titleAr, ...content.bulletsAr.map((b) => `• ${b}`), content.descriptionAr];
     if (content.searchTerms) parts.push("", content.searchTerms);
@@ -336,13 +390,20 @@ export function ListingEditor(props: {
 
         <aside className="order-2 flex min-w-0 flex-col gap-4 xl:order-1">
           <section className="card p-5 sm:p-6" aria-labelledby="f-check">
-            <div className="flex items-center gap-4">
-              <ScoreRing score={score} />
-              <div className="min-w-0">
-                <h2 id="f-check" className="h-section">{t.editor.compliance}</h2>
-                <p className="mt-0.5 text-sm text-mute">{passed === checks.length ? t.editor.allGood : tpl(t.editor.passed, { a: passed, b: checks.length })}</p>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-4">
+                <ScoreRing score={score} />
+                <div className="min-w-0">
+                  <h2 id="f-check" className="h-section">{t.editor.compliance}</h2>
+                  <p className="mt-0.5 text-sm text-mute">{passed === checks.length ? t.editor.allGood : tpl(t.editor.passed, { a: passed, b: checks.length })}</p>
+                </div>
               </div>
+              <button type="button" className="btn btn-primary btn-sm" onClick={autoFixCompliance} disabled={disabled || passed === checks.length || !aiModel} title={!aiModel ? "Connect an AI provider in Settings first" : "Automatically rewrite and recheck the listing"}>
+                {busy === "regen" ? <Loader2 size={15} className="animate-spin" aria-hidden /> : <Sparkles size={15} aria-hidden />}
+                {busy === "regen" ? "Fixing…" : "Auto-Fix"}
+              </button>
             </div>
+            {!aiModel && <p className="mt-3 text-xs text-amber-ink">Connect an AI provider in Settings to enable automatic compliance fixes.</p>}
             <ul className="mt-5 flex flex-col gap-2.5">
               {sorted.map((c) => (
                 <li key={c.id} className="flex gap-2.5 text-[13px] leading-snug">
