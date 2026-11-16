@@ -77,6 +77,19 @@ export function AIAdStudio() {
       workerRef.current = worker;
       const id = ++requestId.current;
       const generatedBlob = await new Promise<Blob>((resolve, reject) => {
+        let settled = false;
+        const cleanup = () => {
+          clearTimeout(timeout);
+          worker.removeEventListener("message", onMessage);
+          worker.removeEventListener("error", onWorkerError);
+          worker.removeEventListener("messageerror", onMessageError);
+        };
+        const finish = (fn: (value: any) => void, value: any) => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          fn(value);
+        };
         const onMessage = (event: MessageEvent<{ id: number; type: string; pct?: number; message?: string; ok?: boolean; blob?: Blob }>) => {
           const data = event.data;
           if (data.id !== id) return;
@@ -85,11 +98,19 @@ export function AIAdStudio() {
             if (data.message) setStatus(data.message);
             return;
           }
-          worker.removeEventListener("message", onMessage);
-          if (data.ok && data.blob) resolve(data.blob);
-          else reject(new Error(data.message || "AI background generation failed."));
+          if (data.ok && data.blob) finish(resolve, data.blob);
+          else finish(reject, new Error(data.message || "AI background generation failed."));
         };
+        const onWorkerError = (event: ErrorEvent) => finish(reject, new Error(event.message || "The AI image worker stopped unexpectedly. Refresh the page and try again."));
+        const onMessageError = () => finish(reject, new Error("Could not read the AI worker response. Refresh the page and try again."));
+        const timeout = window.setTimeout(() => {
+          worker.terminate();
+          workerRef.current = null;
+          finish(reject, new Error("AI model loading is taking too long. Check your connection, keep this tab open, then try again. The first download is about 2.4 GB."));
+        }, 12 * 60 * 1000);
         worker.addEventListener("message", onMessage);
+        worker.addEventListener("error", onWorkerError);
+        worker.addEventListener("messageerror", onMessageError);
         worker.postMessage({ id, prompt });
       });
       setReady(true);
