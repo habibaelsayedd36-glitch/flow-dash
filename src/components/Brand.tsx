@@ -9,7 +9,7 @@ export function Brand(_props: { tone?: "green" | "white"; product?: "Flow" | "Sp
     <span
       role="img"
       aria-label="FLOW Agency"
-      className="block h-10 w-[180px] shrink-0"
+      className="block h-8 w-[145px] shrink-0"
       style={{
         backgroundColor: "#143c28",
         WebkitMaskImage: `url(${LOGO})`,
