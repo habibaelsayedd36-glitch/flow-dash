@@ -193,37 +193,74 @@ function toListing(raw: Record<string, unknown>, m: Marketplace): ListingContent
   return out;
 }
 
+function retryDelayMs(res: Response, data: unknown, attempt: number): number {
+  const errorMessage = (data as { error?: { message?: string } } | null)?.error?.message ?? "";
+  const retryAfter = res.headers.get("retry-after");
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds)) return Math.min(30_000, Math.max(250, seconds * 1000));
+    const dateDelay = Date.parse(retryAfter) - Date.now();
+    if (Number.isFinite(dateDelay) && dateDelay > 0) return Math.min(30_000, dateDelay);
+  }
+
+  // Groq exposes reset windows such as "6s" in rate-limit response headers.
+  for (const header of ["x-ratelimit-reset-tokens", "x-ratelimit-reset-requests"]) {
+    const value = res.headers.get(header);
+    const match = value?.match(/([\\d.]+)\\s*(ms|s|m|h)/i);
+    if (match) {
+      const amount = Number(match[1]);
+      const unit = match[2].toLowerCase();
+      const multiplier = unit === "ms" ? 1 : unit === "s" ? 1000 : unit === "m" ? 60_000 : 3_600_000;
+      return Math.min(30_000, Math.max(250, amount * multiplier));
+    }
+  }
+
+  // Some providers put the exact wait time only in the error message.
+  const wait = errorMessage.match(/(?:try again|retry) in\\s+([\\d.]+)\\s*(ms|seconds?|s)\\b/i);
+  if (wait) {
+    const multiplier = wait[2].toLowerCase().startsWith("ms") ? 1 : 1000;
+    return Math.min(30_000, Math.max(250, Number(wait[1]) * multiplier));
+  }
+  return Math.min(8_000, 1_000 * 2 ** attempt);
+}
+
 async function post(url: string, headers: Record<string, string>, body: unknown, who: string): Promise<unknown> {
   const retryable = new Set([429, 500, 502, 503, 504]);
+  let lastError: unknown;
   for (let attempt = 0; attempt < 3; attempt++) {
+    let res: Response;
     try {
-      const res = await fetch(url, {
+      res = await fetch(url, {
         method: "POST",
         headers: { "content-type": "application/json", ...headers },
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(60_000),
         cache: "no-store",
       });
-      const data: unknown = await res.json().catch(() => null);
-      if (!res.ok) {
-        const err = (data as { error?: { message?: string } } | null)?.error?.message;
-        const message = `${who} (${res.status}): ${err || res.statusText || "request failed"}`;
-        if (retryable.has(res.status) && attempt < 2) {
-          await new Promise((resolve) => setTimeout(resolve, 900 * 2 ** attempt));
-          continue;
-        }
-        throw new Error(message);
-      }
-      return data;
     } catch (error) {
-      if (error instanceof Error && /\\((429|500|502|503|504)\\):/.test(error.message) && attempt < 2) {
-        await new Promise((resolve) => setTimeout(resolve, 900 * 2 ** attempt));
+      lastError = error;
+      if (attempt < 2) {
+        await new Promise((resolve) => setTimeout(resolve, Math.min(8_000, 1_000 * 2 ** attempt)));
         continue;
       }
       throw error;
     }
+
+    const data: unknown = await res.json().catch(() => null);
+    if (!res.ok) {
+      const err = (data as { error?: { message?: string } } | null)?.error?.message;
+      const message = `${who} (${res.status}): ${err || res.statusText || "request failed"}`;
+      if (retryable.has(res.status) && attempt < 2) {
+        // Respect provider reset guidance (especially Groq's TPM window) instead
+        // of retrying too early and falling straight back to the template engine.
+        await new Promise((resolve) => setTimeout(resolve, retryDelayMs(res, data, attempt)));
+        continue;
+      }
+      throw new Error(message);
+    }
+    return data;
   }
-  throw new Error(`${who}: request failed after automatic retries.`);
+  throw lastError instanceof Error ? lastError : new Error(`${who}: request failed after automatic retries.`);
 }
 
 /** One request to whichever provider is connected. Returns the raw text of the reply. */
