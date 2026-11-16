@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Download, ImagePlus, Loader2, Sparkles } from "lucide-react";
+import { compose, cutout } from "@/lib/image-engine";
 
 type Style = "luxury" | "minimal" | "nature" | "studio" | "lifestyle";
 type Category = "beauty" | "electronics" | "fashion" | "food" | "home" | "general";
@@ -120,27 +121,26 @@ export function AIAdStudio() {
         const payload = await response.json().catch(() => ({}));
         throw new Error(payload.error || "Cloud image editing failed.");
       }
-      setProgress(82);
-      setStatus("Finishing the edited product image…");
+      setProgress(84);
+      setStatus("Removing the generated background and preparing pure white…");
       const generatedBlob = await response.blob();
       if (!generatedBlob.size || !generatedBlob.type.startsWith("image/")) {
         throw new Error("Cloud AI returned an invalid image. Please try again.");
       }
-      const generated = await createImageBitmap(generatedBlob);
-      const canvas = document.createElement("canvas");
-      canvas.width = 2000;
-      canvas.height = 2000;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) throw new Error("Your browser could not create the final image.");
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, 2000, 2000);
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
-      const scale = Math.min(2000 / generated.width, 2000 / generated.height);
-      const w = generated.width * scale, h = generated.height * scale;
-      ctx.drawImage(generated, (2000 - w) / 2, (2000 - h) / 2, w, h);
-      generated.close();
-      const blob = await canvasBlob(canvas);
+
+      // Keep the AI-redrawn product, then isolate it from the model-generated
+      // backdrop and place it on a genuinely white Amazon canvas.
+      const separated = await cutout(generatedBlob, 0);
+      if (separated.flags.includes("nothing_found")) {
+        throw new Error("The product could not be separated from the generated background. Please try another photo.");
+      }
+      if (separated.flags.includes("not_separated")) {
+        throw new Error("The generated background could not be separated cleanly. Please try generating the image again.");
+      }
+      setProgress(94);
+      setStatus("Placing the product on pure white (#FFFFFF)…");
+      const canvas = compose(separated, 2000, 0.85);
+
       setStatus("Your AI-edited Amazon image is ready.");
       setProgress(100);
       setPreview(URL.createObjectURL(blob));
