@@ -383,6 +383,9 @@ Required JSON shape:
 }
 
 export async function generateWithAi(p: AiProvider, brief: ProductBrief, m: Marketplace, tone: string, notes: string): Promise<ListingContent> {
+  if (!brief.features.trim() && !brief.featuresAr.trim()) {
+    throw new Error("Add confirmed product features before generating a listing. FLOW does not invent ingredients, benefits, specifications, or certifications from a product name or category.");
+  }
   const tail = `Return exactly this JSON shape:\n{${LISTING_SHAPE}}`;
   const content = toListing(await callListingJson(p, SYSTEM, userPrompt(brief, m, tone, notes, tail)), m);
   return repairShortBullets(p, brief, m, content, tail);
