@@ -40,15 +40,10 @@ export function AIAdStudio() {
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
-  const [ready, setReady] = useState(false);
-  const workerRef = useRef<Worker | null>(null);
-  const requestId = useRef(0);
   const originalUrl = useRef("");
 
   useEffect(() => () => {
     if (originalUrl.current) URL.revokeObjectURL(originalUrl.current);
-    workerRef.current?.terminate();
-    workerRef.current = null;
   }, []);
 
   const chooseFile = (next: File | null) => {
@@ -67,53 +62,25 @@ export function AIAdStudio() {
     setPreview((current) => { if (current) URL.revokeObjectURL(current); return ""; });
     setProgress(0);
     try {
-      setStatus(ready ? "Creating a new advertising background with AI…" : "Loading AI model and tokenizer…");
+      setStatus("Connecting to Cloudflare AI…");
       const prompt = "Photorealistic premium commercial product photography background only, empty central foreground space reserved for a real product to be composited later. " +
         CATEGORIES[category] + ", " + STYLES[style] + ". " +
         (extra.trim() ? extra.trim() + ". " : "") +
         "Square composition, professional art direction, realistic materials, beautiful depth, crisp detail, balanced composition. " +
         "No product, no bottle, no package, no people, no text, no letters, no logo, no watermark.";
-      const worker = workerRef.current ?? new Worker(new URL("../workers/ai-ad.worker.ts", import.meta.url), { type: "module" });
-      workerRef.current = worker;
-      const id = ++requestId.current;
-      const generatedBlob = await new Promise<Blob>((resolve, reject) => {
-        let settled = false;
-        const cleanup = () => {
-          clearTimeout(timeout);
-          worker.removeEventListener("message", onMessage);
-          worker.removeEventListener("error", onWorkerError);
-          worker.removeEventListener("messageerror", onMessageError);
-        };
-        const finish = (fn: (value: any) => void, value: any) => {
-          if (settled) return;
-          settled = true;
-          cleanup();
-          fn(value);
-        };
-        const onMessage = (event: MessageEvent<{ id: number; type: string; pct?: number; message?: string; ok?: boolean; blob?: Blob }>) => {
-          const data = event.data;
-          if (data.id !== id) return;
-          if (data.type === "progress") {
-            if (typeof data.pct === "number") setProgress(data.pct);
-            if (data.message) setStatus(data.message);
-            return;
-          }
-          if (data.ok && data.blob) finish(resolve, data.blob);
-          else finish(reject, new Error(data.message || "AI background generation failed."));
-        };
-        const onWorkerError = (event: ErrorEvent) => finish(reject, new Error(event.message || "The AI image worker stopped unexpectedly. Refresh the page and try again."));
-        const onMessageError = () => finish(reject, new Error("Could not read the AI worker response. Refresh the page and try again."));
-        const timeout = window.setTimeout(() => {
-          worker.terminate();
-          workerRef.current = null;
-          finish(reject, new Error("AI model loading is taking too long. Check your connection, keep this tab open, then try again. The first download is about 2.4 GB."));
-        }, 12 * 60 * 1000);
-        worker.addEventListener("message", onMessage);
-        worker.addEventListener("error", onWorkerError);
-        worker.addEventListener("messageerror", onMessageError);
-        worker.postMessage({ id, prompt });
+      setProgress(10);
+      const response = await fetch("/api/ai-ad/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
       });
-      setReady(true);
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || "Cloud image generation failed.");
+      }
+      setProgress(65);
+      setStatus("AI created the background. Preparing your product photo…");
+      const generatedBlob = await response.blob();
 
       setStatus("Placing your original product into the scene…");
       const [background, product] = await Promise.all([
@@ -183,7 +150,7 @@ export function AIAdStudio() {
         <div className="card overflow-hidden p-3 sm:p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
             <h3 className="h-section">AI advertising result</h3>
-            <span className="rounded-full bg-lime-soft px-3 py-1 text-xs font-medium text-forest">Generated locally</span>
+            <span className="rounded-full bg-lime-soft px-3 py-1 text-xs font-medium text-forest">Cloud AI + local product placement</span>
           </div>
           {preview ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -203,7 +170,7 @@ export function AIAdStudio() {
       <aside className="card flex flex-col gap-5 p-5 sm:p-6">
         <div>
           <h2 className="h-section">Create an ad scene</h2>
-          <p className="mt-1 text-[13px] leading-relaxed text-mute">AI creates a fresh background on your device. FLOW then places your real product photo on top to help preserve its shape, packaging and label.</p>
+          <p className="mt-1 text-[13px] leading-relaxed text-mute">Cloud AI creates a fresh advertising background. FLOW then places your real product photo on top on your device to help preserve its shape, packaging and label.</p>
         </div>
         <div>
           <label className="label" htmlFor="ad-category">Product category</label>
@@ -227,9 +194,8 @@ export function AIAdStudio() {
         </button>
         {busy && <div className="space-y-2"><div className="h-2 overflow-hidden rounded-full bg-sage-soft"><div className="h-full rounded-full bg-forest transition-all" style={{ width: progress + "%" }} /></div><p className="text-xs leading-relaxed text-mute">{status || "Working locally on your device…"}</p></div>}
         {error && <p role="alert" className="rounded-xl bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
-        {ready && <p className="text-xs text-forest">AI model loaded and cached in this browser. Next generations won't need the full model download again.</p>}
         <div className="border-t border-line pt-4 text-xs leading-relaxed text-mute">
-          Free local generation · No API key · First model download is about 2.3 GB · Requires WebGPU and a compatible GPU. Generation quality and speed depend on your device.
+          Cloudflare Workers AI · No image model download on your device · Product cut-out and final composition stay in your browser. Usage is subject to Cloudflare's free daily allowance.
         </div>
       </aside>
     </section>
