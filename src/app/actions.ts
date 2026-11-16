@@ -185,10 +185,9 @@ export async function autoGenerateListingBriefAction(listingId: number): Promise
   if (!provider) return { ok: false, error: "Connect an AI provider in Settings to generate these fields automatically." };
   try {
     const p = row.product;
-    const l = row.listing;
     const raw = await generateText(
       provider,
-      "You are a careful e-commerce product researcher. Return valid JSON only. Use only the facts supplied. Never invent materials, sizes, ingredients, certifications, performance claims, or product specifications. If facts are insufficient, return fewer features rather than guessing. Arabic must be natural Modern Standard Arabic.",
+      "You are a careful e-commerce product researcher. Return valid JSON only. Use only confirmed product fields supplied below. Never treat generated listing copy as evidence. Never invent materials, sizes, ingredients, certifications, performance claims, or product specifications. If facts are insufficient, return empty feature arrays. Arabic must be natural Modern Standard Arabic.",
       `Create a concise product brief for marketplace listing generation.
 Product name EN: ${p.name}
 Product name AR: ${p.nameAr || "(not provided)"}
@@ -197,15 +196,10 @@ Category: ${p.category}
 Existing confirmed features EN: ${p.features || "(none)"}
 Existing confirmed features AR: ${p.featuresAr || "(none)"}
 Existing keywords: ${p.keywords || "(none)"}
-Current listing title EN: ${l.titleEn}
-Current listing title AR: ${l.titleAr}
-Current listing bullets EN: ${(l.bulletsEn || []).join(" | ")}
-Current listing bullets AR: ${(l.bulletsAr || []).join(" | ")}
-Current descriptions EN: ${l.descriptionEn}
-Current descriptions AR: ${l.descriptionAr}
+Do not use any current or previously generated listing text as a source of product facts.
 Return JSON with exactly:
-{"featuresEn":["feature 1","feature 2"],"featuresAr":["ميزة 1","ميزة 2"],"keywords":["keyword 1","keyword 2"]}
-Features must be short factual points, one per array item. Keywords must be relevant search phrases, comma-separated when displayed. Do not include brand-only or generic marketplace words.`
+{"featuresEn":["feature 1"],"featuresAr":["ميزة 1"],"keywords":["keyword 1"]}
+Features must only restate supplied facts. Keywords may include only the product name, brand, category, and supplied feature terms. Do not add ingredients, benefits, claims, or generic unrelated traffic terms.`
     );
     const start = raw.indexOf("{"), end = raw.lastIndexOf("}");
     if (start < 0 || end <= start) throw new Error("AI returned an invalid response.");
