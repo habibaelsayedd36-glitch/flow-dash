@@ -1,29 +1,20 @@
 /**
- * Original FLOW Agency logo assets served by the official website.
- * Keep the mark and wordmark as image assets rather than recreating the logo.
+ * Use the exact combined FLOW logo asset linked from the official website.
+ * Do not recolor, recreate, add badges, or alter the lockup.
  */
-const MARK = "https://www.flow-agency-eg.com/assets/logos/Symbol.png";
-const WORDMARK = "https://www.flow-agency-eg.com/assets/flow-wordmark-white.png";
+const LOGO = "https://www.flow-agency-eg.com/assets/logos/idFIQ5KAQx_logos.png";
 
-export function Brand({ tone = "green", product = "Flow" }: { tone?: "green" | "white"; product?: "Flow" | "Space" }) {
-  const greenFilter = "brightness(0) saturate(100%) invert(19%) sepia(22%) saturate(1184%) hue-rotate(91deg) brightness(93%) contrast(91%)";
+export function Brand() {
   return (
-    <span className="flex items-center gap-3">
-      <img src={MARK} alt="" width={36} height={36} className="size-9 object-contain" />
-      <img
-        src={WORDMARK}
-        alt="FLOW"
-        width={60}
-        height={24}
-        className="h-6 w-[60px] object-contain"
-        style={tone === "green" ? { filter: greenFilter } : undefined}
-      />
-      <span className="rounded-full bg-flow-lime px-3 py-1 font-display text-sm font-bold leading-5 text-flow-green">{product}</span>
-    </span>
+    <img
+      src={LOGO}
+      alt="FLOW"
+      className="h-10 w-auto max-w-[180px] object-contain object-left"
+    />
   );
 }
 
-/** Lime grid on flow-green: the pattern behind the dashboard's sign-in panel. */
+/** Decorative background pattern used by the dashboard sign-in panel. */
 const SQUARES: [number, number][] = [
   [1, 1], [6, 0], [13, 0], [2, 3], [4, 5], [10, 6], [12, 5], [16, 7], [15, 9], [9, 2],
   [6, 13], [7, 13], [9, 13], [7, 14], [13, 14], [1, 17], [2, 17], [12, 17], [14, 17], [20, 3], [24, 6], [22, 10], [27, 2], [19, 12],
