@@ -328,8 +328,14 @@ export function buildTemplateListing(p: ProductBrief, m: Marketplace): ListingCo
     ? stripChars(composeTitle(withBrandAr, featsAr, limit, "، ", r.maxRepeat, extraCount), r.bannedChars)
     : "";
 
-  const bulletsEn = feats.slice(0, r.bullets).map((f) => clip(cap(stripEnd(f)), r.bulletMax));
-  const bulletsAr = featsAr.slice(0, r.bullets).map((f) => clip(stripEnd(f), r.bulletMax));
+  // The no-key template path must meet the same 76-character minimum as AI output.
+  // Expand only with neutral shopper guidance; never add product-performance claims.
+  const bulletsEn = feats.slice(0, r.bullets).map((f) =>
+    clip(`${cap(stripEnd(f))}. Consider this confirmed product detail when comparing options and checking whether the item matches your intended needs.`, r.bulletMax)
+  );
+  const bulletsAr = featsAr.slice(0, r.bullets).map((f) =>
+    clip(`${stripEnd(f)}؛ راجع هذه المعلومة المؤكدة عند مقارنة الخيارات وتحديد مدى توافق المنتج مع احتياجك قبل اتخاذ قرار الشراء.`, r.bulletMax)
+  );
 
   const descriptionEn = feats.length
     ? clip(`${withBrand || p.name}. ${feats.map((f) => cap(stripEnd(f))).join(". ")}.`, r.descMax ?? 5000)
