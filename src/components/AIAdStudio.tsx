@@ -143,7 +143,8 @@ export function AIAdStudio() {
 
       setStatus("Your AI-edited Amazon image is ready.");
       setProgress(100);
-      setPreview(URL.createObjectURL(blob));
+      const outputBlob = await canvasBlob(canvas);
+      setPreview(URL.createObjectURL(outputBlob));
       setStatus("Your Amazon-ready main image is ready.");
       setProgress(100);
     } catch (e) {
