@@ -20,6 +20,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
     const image_b64 = typeof body?.image_b64 === "string" ? body.image_b64 : "";
+    const image_type = typeof body?.image_type === "string" && ["image/png", "image/jpeg", "image/webp"].includes(body.image_type) ? body.image_type : "image/png";
 
     if (!prompt || prompt.length > 2048) {
       return NextResponse.json({ error: "The image prompt must be between 1 and 2048 characters." }, { status: 400 });
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest) {
     const imageBytes = Buffer.from(image_b64, "base64");
     const form = new FormData();
     form.append("prompt", prompt);
-    form.append("input_image_0", new Blob([imageBytes], { type: "image/png" }), "product-image.png");
+    form.append("input_image_0", new Blob([imageBytes], { type: image_type }), image_type === "image/jpeg" ? "product-image.jpg" : image_type === "image/webp" ? "product-image.webp" : "product-image.png");
     form.append("width", "1024");
     form.append("height", "1024");
 
