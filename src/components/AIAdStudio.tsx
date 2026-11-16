@@ -63,100 +63,69 @@ export function AIAdStudio() {
     setProgress(0);
     try {
       setStatus("Connecting to Cloudflare AI…");
-      // Universal Amazon main-image prompt, tailored to the selected product category and photography finish.
-      // Cloudflare creates only the compliant studio background; FLOW preserves and composites the real product.
-      const categoryGuidance: Record<Category, string> = {
-        beauty: "soft precise beauty-product studio lighting, controlled reflections, clean cosmetic campaign finish",
-        electronics: "crisp technical studio lighting, controlled reflections, sharp clean edges",
-        fashion: "accurate fabric and material presentation, balanced softbox lighting",
-        food: "fresh high-key commercial lighting, natural color balance, hygienic clean presentation",
-        home: "balanced architectural studio lighting, realistic material rendering",
-        general: "neutral commercial product-photography lighting, accurate color balance",
-      };
-      const styleGuidance: Record<Style, string> = {
-        luxury: "premium luxury studio lighting with refined controlled highlights",
-        minimal: "bright minimal high-key studio lighting",
-        nature: "soft daylight-balanced studio lighting, without adding plants or scenery",
-        studio: "professional three-point studio lighting",
-        lifestyle: "clean editorial-quality studio lighting, while keeping the background pure white",
-      };
+      // Use the uploaded photo as an image reference so the model can improve the actual composition, lighting and presentation.
       const prompt = [
-        "Generate a seamless, evenly illuminated pure white RGB 255,255,255 background for an Amazon marketplace MAIN product image.",
-        "Square 1:1 high-key professional commercial photography studio, neutral white from edge to edge, no horizon, no gradient, no texture.",
-        categoryGuidance[category],
-        styleGuidance[style],
-        "Keep the entire center empty and uniformly white. The real, unchanged product photo will be composited over this background by the application.",
-        "No product, objects, props, platforms, flowers, leaves, scenery, people, text, letters, logos, badges, borders or watermark.",
-        "Photorealistic, clean, sharp, premium studio image. Strict Amazon main-image white-background presentation.",
-        extra.trim() ? "Additional visual direction (must not introduce objects or change the white background): " + extra.trim() : "",
+        "Edit the provided product photograph into a premium Amazon-ready commercial product photo.",
+        "Use the uploaded image as the exact visual reference. Preserve the same product identity, packaging silhouette, brand colors, logo and label as faithfully as possible.",
+        "Improve the product presentation: correct perspective and alignment, make the product upright and visually centered, refine exposure, white balance, contrast, color accuracy, sharpness and realistic studio lighting.",
+        "Create a seamless pure white RGB 255,255,255 background, subtle natural contact shadow, clean high-end ecommerce studio photography.",
+        "Keep the entire product visible, proportional and dominant, with no cropping, extra objects, added text, invented accessories, fake logos or watermark.",
+        "Square 1:1 Amazon main image, photorealistic, crisp professional quality.",
+        "Category: " + category + ". Visual finish: " + style + ".",
+        extra.trim() ? "Additional direction: " + extra.trim() : "",
       ].filter(Boolean).join(" ");
-      setProgress(10);
+      setProgress(12);
+      setStatus("Sending your original product photo to Cloudflare image editing…");
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      let binary = "";
+      const chunkSize = 0x8000;
+      for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+        binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+      }
+      const image_b64 = btoa(binary);
       const controller = new AbortController();
-      const requestTimer = window.setTimeout(() => controller.abort(), 42_000);
+      const requestTimer = window.setTimeout(() => controller.abort(), 52_000);
       let response: Response;
       try {
         response = await fetch("/api/ai-ad/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt }),
+          body: JSON.stringify({ prompt, image_b64 }),
           signal: controller.signal,
         });
       } catch (requestError) {
-        if (controller.signal.aborted) throw new Error("Cloudflare is taking too long to generate this image. Please try again.");
+        if (controller.signal.aborted) throw new Error("Cloudflare image editing took too long. Please try again.");
         throw requestError;
       } finally {
         window.clearTimeout(requestTimer);
       }
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
-        throw new Error(payload.error || "Cloud image generation failed.");
+        throw new Error(payload.error || "Cloud image editing failed.");
       }
-      setProgress(65);
-      setStatus("AI created the background. Preparing your product photo…");
+      setProgress(82);
+      setStatus("Finishing the edited product image…");
       const generatedBlob = await response.blob();
       if (!generatedBlob.size || !generatedBlob.type.startsWith("image/")) {
         throw new Error("Cloud AI returned an invalid image. Please try again.");
       }
-
-      setStatus("Removing the original photo background and preserving the product…");
-      setProgress(72);
-      const product = await Promise.race([
-        cutout(file, 28),
-        new Promise<never>((_, reject) => window.setTimeout(() => reject(new Error("Product cut-out is taking too long. Try a smaller, clearer photo.")), 35_000)),
-      ]);
-      if (!product.productPx) throw new Error("Could not detect the product. Try a clearer photo with the full product visible.");
-
-      setStatus("Compositing your original product onto the Amazon background…");
-      setProgress(88);
-      const background = await createImageBitmap(generatedBlob);
+      const generated = await createImageBitmap(generatedBlob);
       const canvas = document.createElement("canvas");
       canvas.width = 2000;
       canvas.height = 2000;
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("Your browser could not create the final image.");
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, 2000, 2000);
-      ctx.drawImage(background, 0, 0, 2000, 2000);
-      background.close();
-
-      const maxSide = 1700;
-      const scale = maxSide / Math.max(product.canvas.width, product.canvas.height);
-      const w = product.canvas.width * scale;
-      const h = product.canvas.height * scale;
-      const x = (2000 - w) / 2;
-      const y = (2000 - h) / 2;
-      ctx.save();
-      ctx.filter = "blur(24px)";
-      ctx.fillStyle = "rgba(18, 16, 13, 0.26)";
-      ctx.beginPath();
-      ctx.ellipse(1000, y + h * 0.97, Math.max(120, w * 0.34), 42, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-      ctx.drawImage(product.canvas, x, y, w, h);
-
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      const scale = Math.min(2000 / generated.width, 2000 / generated.height);
+      const w = generated.width * scale, h = generated.height * scale;
+      ctx.drawImage(generated, (2000 - w) / 2, (2000 - h) / 2, w, h);
+      generated.close();
       const blob = await canvasBlob(canvas);
+      setStatus("Your AI-edited Amazon image is ready.");
+      setProgress(100);
       setPreview(URL.createObjectURL(blob));
       setStatus("Your Amazon-ready main image is ready.");
       setProgress(100);
@@ -194,7 +163,7 @@ export function AIAdStudio() {
         <div className="card overflow-hidden p-3 sm:p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
             <h3 className="h-section">Amazon main image result</h3>
-            <span className="rounded-full bg-lime-soft px-3 py-1 text-xs font-medium text-forest">Cloud AI + local product placement</span>
+            <span className="rounded-full bg-lime-soft px-3 py-1 text-xs font-medium text-forest">Cloud AI image editing</span>
           </div>
           {preview ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -214,7 +183,7 @@ export function AIAdStudio() {
       <aside className="card flex flex-col gap-5 p-5 sm:p-6">
         <div>
           <h2 className="h-section">Create an ad scene</h2>
-          <p className="mt-1 text-[13px] leading-relaxed text-mute">Cloud AI prepares a clean Amazon-compliant white studio background automatically for every product. FLOW places your original product on top locally, preserving its real shape, packaging and label.</p>
+          <p className="mt-1 text-[13px] leading-relaxed text-mute">Cloudflare edits the uploaded product photo directly to improve alignment, lighting, colors and studio presentation.</p>
         </div>
         <div>
           <label className="label" htmlFor="ad-category">Product category</label>
@@ -239,7 +208,7 @@ export function AIAdStudio() {
         {busy && <div className="space-y-2" aria-live="polite"><div className="h-2 overflow-hidden rounded-full bg-sage-soft"><div className="h-full rounded-full bg-forest transition-all" style={{ width: progress + "%" }} /></div><p className="text-xs leading-relaxed text-mute">{status || "Working…"}</p><p className="text-[11px] text-mute">Keep this tab open while the image is being prepared.</p></div>}
         {error && <p role="alert" className="rounded-xl bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
         <div className="border-t border-line pt-4 text-xs leading-relaxed text-mute">
-          Amazon main-image preset · Pure white background · Original product preserved · 2000 × 2000 px export. Cloud AI generates the background; product placement stays in your browser.
+          Amazon main-image preset · Pure white background · Original product preserved · 2000 × 2000 px export. Cloud AI edits the original product photo directly.
         </div>
       </aside>
     </section>
