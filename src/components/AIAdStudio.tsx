@@ -63,11 +63,9 @@ export function AIAdStudio() {
     setProgress(0);
     try {
       setStatus("Connecting to Cloudflare AI…");
-      const prompt = "Photorealistic premium commercial product photography background only, empty central foreground space reserved for a real product to be composited later. " +
-        CATEGORIES[category] + ", " + STYLES[style] + ". " +
-        (extra.trim() ? extra.trim() + ". " : "") +
-        "Square composition, professional art direction, realistic materials, beautiful depth, crisp detail, balanced composition. " +
-        "No product, no bottle, no package, no people, no text, no letters, no logo, no watermark.";
+      // Universal Amazon main-image background prompt for every product category.
+      // The original product is composited locally, so Cloud AI creates only a compliant white background.
+      const prompt = "Create a perfectly clean, seamless pure white ecommerce photography background, RGB 255 255 255, evenly illuminated edge to edge. Square professional product photography studio, subtle natural contact shadow only at the bottom center, neutral softbox lighting, no visible horizon, no gradient, no texture, no platform, no props, no decorations. Keep the center completely empty and uniformly white because the real product will be composited there afterward. This is an Amazon marketplace MAIN image background, not a lifestyle advertisement. Absolutely no objects, no product, no bottle, no packaging, no flowers, no leaves, no scenery, no people, no text, no letters, no logo, no badges, no border, no watermark. Photorealistic high-key commercial studio lighting.";
       setProgress(10);
       const response = await fetch("/api/ai-ad/generate", {
         method: "POST",
@@ -89,33 +87,35 @@ export function AIAdStudio() {
       ]);
       if (!product.productPx) throw new Error("Could not detect the product. Try a clearer photo with the full product visible.");
       const canvas = document.createElement("canvas");
-      canvas.width = 1024;
-      canvas.height = 1024;
+      canvas.width = 2000;
+      canvas.height = 2000;
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("Your browser could not create the final image.");
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
-      ctx.drawImage(background, 0, 0, 1024, 1024);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, 2000, 2000);
+      ctx.drawImage(background, 0, 0, 2000, 2000);
       background.close();
 
-      const maxSide = 660;
+      const maxSide = 1700;
       const scale = maxSide / Math.max(product.canvas.width, product.canvas.height);
       const w = product.canvas.width * scale;
       const h = product.canvas.height * scale;
-      const x = (1024 - w) / 2;
-      const y = 850 - h;
+      const x = (2000 - w) / 2;
+      const y = (2000 - h) / 2;
       ctx.save();
       ctx.filter = "blur(24px)";
       ctx.fillStyle = "rgba(18, 16, 13, 0.26)";
       ctx.beginPath();
-      ctx.ellipse(512, 866, Math.max(100, w * 0.34), 28, 0, 0, Math.PI * 2);
+      ctx.ellipse(1000, y + h * 0.97, Math.max(120, w * 0.34), 42, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
       ctx.drawImage(product.canvas, x, y, w, h);
 
       const blob = await canvasBlob(canvas);
       setPreview(URL.createObjectURL(blob));
-      setStatus("Your AI advertising image is ready.");
+      setStatus("Your Amazon-ready main image is ready.");
       setProgress(100);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong while creating the ad.");
@@ -129,7 +129,7 @@ export function AIAdStudio() {
     if (!preview) return;
     const a = document.createElement("a");
     a.href = preview;
-    a.download = "flow-ai-product-ad.png";
+    a.download = "flow-amazon-main-image.png";
     a.click();
   };
 
@@ -149,7 +149,7 @@ export function AIAdStudio() {
         </label>
         <div className="card overflow-hidden p-3 sm:p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
-            <h3 className="h-section">AI advertising result</h3>
+            <h3 className="h-section">Amazon main image result</h3>
             <span className="rounded-full bg-lime-soft px-3 py-1 text-xs font-medium text-forest">Cloud AI + local product placement</span>
           </div>
           {preview ? (
@@ -159,7 +159,7 @@ export function AIAdStudio() {
             <div className="grid aspect-square w-full place-items-center rounded-xl bg-sage-soft text-center text-sm text-mute">
               <div className="max-w-xs px-6">
                 <Sparkles className="mx-auto mb-3 text-moss" size={30} />
-                Your new advertising scene will appear here.
+                Your Amazon-ready main image will appear here.
               </div>
             </div>
           )}
@@ -170,7 +170,7 @@ export function AIAdStudio() {
       <aside className="card flex flex-col gap-5 p-5 sm:p-6">
         <div>
           <h2 className="h-section">Create an ad scene</h2>
-          <p className="mt-1 text-[13px] leading-relaxed text-mute">Cloud AI creates a fresh advertising background. FLOW then places your real product photo on top on your device to help preserve its shape, packaging and label.</p>
+          <p className="mt-1 text-[13px] leading-relaxed text-mute">Cloud AI prepares a clean Amazon-compliant white studio background automatically for every product. FLOW places your original product on top locally, preserving its real shape, packaging and label.</p>
         </div>
         <div>
           <label className="label" htmlFor="ad-category">Product category</label>
@@ -195,7 +195,7 @@ export function AIAdStudio() {
         {busy && <div className="space-y-2"><div className="h-2 overflow-hidden rounded-full bg-sage-soft"><div className="h-full rounded-full bg-forest transition-all" style={{ width: progress + "%" }} /></div><p className="text-xs leading-relaxed text-mute">{status || "Working locally on your device…"}</p></div>}
         {error && <p role="alert" className="rounded-xl bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
         <div className="border-t border-line pt-4 text-xs leading-relaxed text-mute">
-          Cloudflare Workers AI · No image model download on your device · Product cut-out and final composition stay in your browser. Usage is subject to Cloudflare's free daily allowance.
+          Amazon main-image preset · Pure white background · Original product preserved · 2000 × 2000 px export. Cloud AI generates the background; product placement stays in your browser.
         </div>
       </aside>
     </section>
