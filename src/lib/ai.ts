@@ -206,7 +206,7 @@ function retryDelayMs(res: Response, data: unknown, attempt: number): number {
   // Groq exposes reset windows such as "6s" in rate-limit response headers.
   for (const header of ["x-ratelimit-reset-tokens", "x-ratelimit-reset-requests"]) {
     const value = res.headers.get(header);
-    const match = value?.match(/([\\d.]+)\\s*(ms|s|m|h)/i);
+    const match = value?.match(/([\d.]+)\s*(ms|s|m|h)/i);
     if (match) {
       const amount = Number(match[1]);
       const unit = match[2].toLowerCase();
@@ -216,7 +216,7 @@ function retryDelayMs(res: Response, data: unknown, attempt: number): number {
   }
 
   // Some providers put the exact wait time only in the error message.
-  const wait = errorMessage.match(/(?:try again|retry) in\\s+([\\d.]+)\\s*(ms|seconds?|s)\\b/i);
+  const wait = errorMessage.match(/(?:try again|retry) in\s+([\d.]+)\s*(ms|seconds?|s)\\b/i);
   if (wait) {
     const multiplier = wait[2].toLowerCase().startsWith("ms") ? 1 : 1000;
     return Math.min(30_000, Math.max(250, Number(wait[1]) * multiplier));
@@ -281,6 +281,8 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
       { authorization: `Bearer ${p.key}` },
       {
         model: p.model,
+        // Keep Groq's requested token reservation below the free-tier TPM ceiling.
+        ...(p.id === "groq" ? { max_completion_tokens: 1800 } : {}),
         messages: [
           { role: "system", content: system },
           { role: "user", content: user },
