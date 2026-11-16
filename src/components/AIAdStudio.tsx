@@ -90,7 +90,7 @@ export function AIAdStudio() {
         response = await fetch("/api/ai-ad/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt, image_b64 }),
+          body: JSON.stringify({ prompt, image_b64, image_type: file.type }),
           signal: controller.signal,
         });
       } catch (requestError) {
