@@ -173,10 +173,33 @@ const str = (v: unknown) => (typeof v === "string" ? v.trim() : typeof v === "nu
 const list = (v: unknown, max: number) => (Array.isArray(v) ? v.map(str).filter(Boolean).slice(0, max) : []);
 
 function parseJson(text: string): Record<string, unknown> {
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start < 0 || end <= start) throw new Error("The model did not return JSON.");
-  return JSON.parse(text.slice(start, end + 1)) as Record<string, unknown>;
+  // Strip common Markdown wrappers and isolate the outer JSON object.
+  const cleaned = text.trim().replace(/^\x60{3}(?:json)?\s*/i, "").replace(/\s*\x60{3}$/i, "");
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start < 0 || end <= start) throw new Error("The model did not return a JSON object.");
+  const parsed: unknown = JSON.parse(cleaned.slice(start, end + 1));
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("The model response is not a JSON object.");
+  return parsed as Record<string, unknown>;
+}
+
+async function callListingJson(p: AiProvider, system: string, prompt: string): Promise<Record<string, unknown>> {
+  const first = await callModel(p, system, prompt, true);
+  try {
+    return parseJson(first);
+  } catch {
+    // A few Groq model responses can violate JSON mode despite response_format.
+    // Ask once for a clean serialization before falling back to templates.
+    const repair = `Convert the content below into one syntactically valid JSON object.
+Return ONLY JSON: no Markdown fences, no explanation, no comments, no trailing commas.
+Use exactly the required keys and value types. Preserve all product facts and wording.
+Required shape:
+${LISTING_SHAPE}
+Invalid response:
+${first.slice(0, 10000)}`;
+    const second = await callModel(p, system, repair, true);
+    return parseJson(second);
+  }
 }
 
 function toListing(raw: Record<string, unknown>, m: Marketplace): ListingContent {
@@ -351,7 +374,7 @@ Previous draft:
 ${JSON.stringify(content)}
 Required JSON shape:
 {${LISTING_SHAPE}}`;
-  const repaired = toListing(parseJson(await callModel(p, SYSTEM, repairPrompt, true)), m);
+  const repaired = toListing(await callListingJson(p, SYSTEM, repairPrompt), m);
   if (hasShortBullets(repaired, m)) {
     const short = [...repaired.bulletsEn, ...repaired.bulletsAr].filter((bullet) => bullet.trim().length < min).length;
     throw new Error(`${p.label}: generated bullets still fail the ${min}-character minimum (${short} short bullets). Add more product facts or retry after the provider limit resets.`);
@@ -362,7 +385,7 @@ Required JSON shape:
 export async function generateWithAi(p: AiProvider, brief: ProductBrief, m: Marketplace, tone: string, notes: string): Promise<ListingContent> {
   const tail = `Return exactly this JSON shape:\n{${LISTING_SHAPE}}`;
   const text = await callModel(p, SYSTEM, userPrompt(brief, m, tone, notes, tail), true);
-  const content = toListing(parseJson(text), m);
+  const content = toListing(await callListingJson(p, SYSTEM, userPrompt(brief, m, tone, notes, tail)), m);
   return repairShortBullets(p, brief, m, content, tail);
 }
 
@@ -396,7 +419,7 @@ Also return a "specs" object with your best estimate for: ${missing.join(", ") |
 
 Return exactly this JSON shape:
 {${LISTING_SHAPE},"specs":{${missing.map((k) => `"${k}":""`).join(",")}}}`;
-  const raw = parseJson(await callModel(p, SYSTEM, userPrompt(brief, m, tone, "", tail), true));
+  const raw = await callListingJson(p, SYSTEM, userPrompt(brief, m, tone, "", tail));
   const initialContent = toListing(raw, m);
   const content = await repairShortBullets(p, brief, m, initialContent, tail);
   const rawSpecs = (raw.specs && typeof raw.specs === "object" ? raw.specs : {}) as Record<string, unknown>;
