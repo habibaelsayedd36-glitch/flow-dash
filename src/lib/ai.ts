@@ -140,19 +140,36 @@ function toListing(raw: Record<string, unknown>, m: Marketplace): ListingContent
 }
 
 async function post(url: string, headers: Record<string, string>, body: unknown, who: string): Promise<unknown> {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json", ...headers },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(60_000),
-    cache: "no-store",
-  });
-  const data: unknown = await res.json().catch(() => null);
-  if (!res.ok) {
-    const err = (data as { error?: { message?: string } } | null)?.error?.message;
-    throw new Error(`${who} (${res.status}): ${err || res.statusText || "request failed"}`);
+  const retryable = new Set([429, 500, 502, 503, 504]);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...headers },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(60_000),
+        cache: "no-store",
+      });
+      const data: unknown = await res.json().catch(() => null);
+      if (!res.ok) {
+        const err = (data as { error?: { message?: string } } | null)?.error?.message;
+        const message = `${who} (${res.status}): ${err || res.statusText || "request failed"}`;
+        if (retryable.has(res.status) && attempt < 2) {
+          await new Promise((resolve) => setTimeout(resolve, 900 * 2 ** attempt));
+          continue;
+        }
+        throw new Error(message);
+      }
+      return data;
+    } catch (error) {
+      if (error instanceof Error && /\\((429|500|502|503|504)\\):/.test(error.message) && attempt < 2) {
+        await new Promise((resolve) => setTimeout(resolve, 900 * 2 ** attempt));
+        continue;
+      }
+      throw error;
+    }
   }
-  return data;
+  throw new Error(`${who}: request failed after automatic retries.`);
 }
 
 /** One request to whichever provider is connected. Returns the raw text of the reply. */
@@ -182,8 +199,8 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
     )) as { choices?: { message?: { content?: string } }[] };
     text = data.choices?.[0]?.message?.content ?? "";
   } else {
-    const data = (await post(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(p.model)}:generateContent`,
+    const requestGemini = (model: string) => post(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
       { "x-goog-api-key": p.key },
       {
         systemInstruction: { parts: [{ text: system }] },
@@ -191,7 +208,16 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
         ...(json ? { generationConfig: { responseMimeType: "application/json" } } : {}),
       },
       p.label,
-    )) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
+    );
+    let data: { candidates?: { content?: { parts?: { text?: string }[] } }[] };
+    try {
+      data = (await requestGemini(p.model)) as typeof data;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      // If Google's selected model is overloaded, switch once to a stable Flash fallback.
+      if (!message.includes("(503):") || p.model === "gemini-2.5-flash") throw error;
+      data = (await requestGemini("gemini-2.5-flash")) as typeof data;
+    }
     text = (data.candidates?.[0]?.content?.parts ?? []).map((x) => x.text ?? "").join("");
   }
   if (!text.trim()) throw new Error(`${p.label}: empty response.`);
