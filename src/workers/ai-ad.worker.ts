@@ -1,4 +1,5 @@
 import { detectCapabilities, generateImage, loadModel } from "web-txt2img";
+import { AutoTokenizer, env } from "@xenova/transformers";
 
 type Request = { id: number; prompt: string };
 type Progress = { id: number; type: "progress"; pct?: number; message?: string };
@@ -16,7 +17,8 @@ async function ensureModel(id: number) {
       const result = await loadModel("sd-turbo", {
         backendPreference: ["webgpu"],
         tokenizerProvider: async () => {
-          const { AutoTokenizer, env } = await import("@xenova/transformers");
+          // Configure Transformers.js before requesting tokenizer files. This
+          // worker uses a static import so the bundler includes it in production.
           env.allowLocalModels = false;
           env.allowRemoteModels = true;
           env.remoteHost = "https://huggingface.co/";
@@ -24,7 +26,12 @@ async function ensureModel(id: number) {
           env.useBrowserCache = true;
           const tokenizer = await AutoTokenizer.from_pretrained("Xenova/clip-vit-base-patch16");
           tokenizer.pad_token_id = 0;
-          return (text: string, options?: Record<string, unknown>) => tokenizer(text, options);
+          return async (text: string, options?: Record<string, unknown>) => {
+            const encoded = await tokenizer(text, options);
+            const ids = encoded.input_ids as unknown as { data?: ArrayLike<number> } | ArrayLike<number>;
+            const values = ids && typeof ids === "object" && "data" in ids && ids.data ? ids.data : ids;
+            return { input_ids: Array.from(values as ArrayLike<number>, Number) };
+          };
         },
         onProgress: (p) => {
           const message: Progress = { id, type: "progress", pct: p.pct, message: p.message ?? p.phase };
