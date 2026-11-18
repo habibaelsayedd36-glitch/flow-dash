@@ -82,7 +82,7 @@ DESCRIPTION:
 - Incorporate useful confirmed specifications and relevant search phrases naturally.
 - Add helpful context and explain benefits, but do not create new product facts, usage instructions, safety statements or performance promises.
 - Do not copy the bullets verbatim. Avoid generic openings and repetitive conclusions.
-- Respect marketplace limits. If the brief genuinely contains very little information, stay accurate rather than inventing content.
+- Respect marketplace limits. If the brief contains little information or no public source could be verified, write conservative copy from the explicit product identity and supplied attributes only.
 
 ARABIC AND ENGLISH:
 - English must read like polished native e-commerce copy, not a string of keywords.
@@ -159,7 +159,7 @@ Product brief:
 - Brand: ${p.brand || "(none)"}
 - Product name (English): ${p.name}
 - Product name (Arabic): ${p.nameAr || "(not provided — write it)"}
-- Category: ${p.category === "auto" ? "Infer the exact category from the verified product research above; do not assume a default category." : p.category}
+- Category: ${p.category === "auto" ? "Infer only what is clear from the product name and supplied facts; if unclear, use a broad category and do not guess." : p.category}
 - Key features (English):
 ${p.features || "(none provided)"}
 - Key features (Arabic):
@@ -453,9 +453,10 @@ function isRelevantResearchPage(
   brandHint: string,
 ): boolean {
   const stopWords = new Set([
-    "the", "and", "for", "with", "from", "official", "product", "new",
-    "cream", "gel", "serum", "lotion", "moisturizer", "moisturiser",
-    "hydrating", "skin", "face", "ml", "oz",
+    "the", "and", "for", "with", "from", "official", "product", "new", "original",
+    "ml", "mg", "gm", "gr", "kg", "oz", "pcs", "piece", "pieces", "pack", "set",
+    "cream", "gel", "serum", "lotion", "moisturizer", "moisturiser", "hydrating",
+    "skin", "face", "daily", "everyday", "fresh", "steps", "quick", "deep",
   ]);
   // Product names often appear after navigation, cookie banners, and store
   // headers. Search the full readable page plus the search-result snippet;
@@ -468,10 +469,23 @@ function isRelevantResearchPage(
   const productTokens = normalizeResearchMatchText(brief.name + " " + brief.nameAr)
     .split(/\s+/)
     .filter((token) => token.length > 2 && !stopWords.has(token) && !brandTokens.includes(token));
-  const brandMatches = brandTokens.every((token) => searchable.has(token));
-  const productMatches = productTokens.length === 0 ||
-    productTokens.some((token) => searchable.has(token));
-  return brandMatches && productMatches;
+  const matchedProductTokens = productTokens.filter((token) => searchable.has(token));
+  const overlap = productTokens.length ? matchedProductTokens.length / productTokens.length : 0;
+  const normalizedPage = normalizeResearchMatchText([item.title, item.snippet ?? "", item.page].join(" "));
+  const normalizedName = normalizeResearchMatchText(brief.name)
+    .replace(/\\b\\d+(?:[.,]\\d+)?\\s*(?:ml|mg|g|kg|oz|pcs|pieces?)\\b/g, " ")
+    .replace(/\\s+/g, " ").trim();
+  const exactNameMatch = normalizedName.length >= 8 && normalizedPage.includes(normalizedName);
+  const matchedBrandTokens = brandTokens.filter((token) => searchable.has(token)).length;
+  const brandOverlap = brandTokens.length ? matchedBrandTokens.length / brandTokens.length : 1;
+  // Retailer pages often omit the brand in the body, while brand stores may
+  // abbreviate product names. Accept a strong product-name match or a
+  // reasonable product + brand match; do not require every brand token.
+  const productMatches = exactNameMatch ||
+    (productTokens.length >= 2 && overlap >= 0.5) ||
+    (productTokens.length === 1 && matchedProductTokens.length === 1);
+  const brandSupportsMatch = brandTokens.length === 0 || brandOverlap >= 0.5;
+  return productMatches && (brandSupportsMatch || exactNameMatch || overlap >= 0.75);
 }
 
 /** Researches an exact product name against public web results before copy is generated. */
@@ -480,11 +494,16 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
   const normalizedName = brief.name
     .replace(/\bhyadrate\b/gi, "hydrate")
     .replace(/\bhydrate cream\b/gi, "hydra gel cream");
+  const cleanSearchName = normalizedName
+    .replace(/[|,()[\\]{}]/g, " ")
+    .replace(/\\b\\d+(?:[.,]\\d+)?\\s*(?:ml|mg|g|kg|oz|pcs|pieces?)\\b/gi, " ")
+    .replace(/\\s+/g, " ").trim();
   const queries = Array.from(new Set([
-    [brandHint, brief.name, "official product details ingredients specifications"].filter(Boolean).join(" "),
-    [brandHint, normalizedName, "official product"].filter(Boolean).join(" "),
-    /dermaelle/i.test(brandHint + " " + brief.name) ? "Dermaelle hydra gel cream moisturizer official" : "",
-  ].filter(Boolean)));
+    [brandHint, '"' + brief.name + '"', "product"].filter(Boolean).join(" "),
+    '"' + brief.name + '"',
+    [brandHint, cleanSearchName, "product details"].filter(Boolean).join(" "),
+    [cleanSearchName, "brand product official store"].filter(Boolean).join(" "),
+  ].filter((query) => query.trim().length > 3)));
   const results: Array<{ url: string; title: string; snippet: string }> = [];
   const seen = new Set<string>();
   let searchWasAvailable = false;
@@ -574,39 +593,6 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
       if (results.length >= 8) break;
     }
   }
-  // RVRS product names are listed together in this third-party brand catalogue.
-  // General search often ranks unrelated sneaker-care pages above this catalogue,
-  // so add it explicitly and prioritize it for RVRS rows. The catalogue confirms
-  // product identity and the wording/pack size only; it does not substantiate
-  // ingredients, cleaning performance, materials, or other product claims.
-  if (/\brvrs\b/i.test(brandHint + " " + brief.name)) {
-    addResult(
-      "https://frppr.com/brands/rvrs",
-      "FRPPR RVRS brand catalogue",
-      "RVRS product catalogue; product names and pack sizes",
-    );
-    const catalogueIndex = results.findIndex((item) => item.url.includes("frppr.com/brands/rvrs"));
-    if (catalogueIndex > 0) results.unshift(results.splice(catalogueIndex, 1)[0]);
-  }
-
-  // Prefer the manufacturer's focused Hyalubalance collection for Dermaelle
-  // hydration/cream searches. The full 46-item catalogue is too long: its first
-  // page excerpt can omit Oil-Free Hydra-Gel, even though it is the exact match.
-  if (/dermaelle/i.test(brandHint + " " + brief.name)) {
-    const hydrationQuery = /\b(hydra|hydrate|hydration|moistur|cream|gel)\b/i.test(brief.name);
-    if (hydrationQuery) {
-      addResult(
-        "https://e-dermaelle.com/products/dermaelle-hyalubalance-oil-free-hydra-gel-60-ml",
-        "Dermaelle official Oil-Free Hydra-Gel 60ml product page",
-      );
-      addResult("https://e-dermaelle.com/collections/hyalu-balance", "Dermaelle official Hyalubalance collection");
-      // Put the exact manufacturer's product page first so its facts survive
-      // the three-source limit and are not crowded out by unrelated results.
-      const exactIndex = results.findIndex((item) => item.url.includes("/products/dermaelle-hyalubalance-oil-free-hydra-gel-60-ml"));
-      if (exactIndex > 0) results.unshift(results.splice(exactIndex, 1)[0]);
-    }
-    addResult("https://e-dermaelle.com/collections/all", "Dermaelle official product catalogue");
-  }
   if (!results.length && !searchWasAvailable) throw new Error("FLOW could not reach its public product research service. Please retry in a moment.");
   if (!results.length) throw new Error("FLOW could not find public product sources for this exact name. Add a brand or model number and retry.");
 
@@ -622,7 +608,7 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
       .replace(/\n{3,}/g, "\n\n")
       .trim()
   );
-  const pages = await Promise.all(results.slice(0, 8).map(async (result) => {
+  const pages = await Promise.all(results.slice(0, 12).map(async (result) => {
     // Try the clean Reader representation first.
     try {
       const response = await fetch("https://r.jina.ai/" + result.url, {
@@ -678,29 +664,33 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
     item.page.length > 300 && isRelevantResearchPage(item, brief, brandHint),
   );
   if (!readablePages.length) {
-    const hadReadablePages = pages.some((item) => item.page.length > 300);
-    throw new Error(hadReadablePages
-      ? "FLOW could read public pages, but could not verify that any of them describe this exact product and brand. No unverified details were used."
-      : "FLOW found the product page but could not read its contents. The source website blocked both page-reading routes; no listing was generated.");
+    // Public research is an aid, not a hard dependency. If no exact source can
+    // be verified, continue from the user's supplied product identity and
+    // explicit attributes only, with strict no-guessing instructions.
+    const suppliedFacts = [
+      "User-supplied product identity (not independently verified): " + brief.name,
+      brief.brand.trim() ? "User-supplied brand: " + brief.brand.trim() : "",
+      brief.category && brief.category !== "auto" ? "User-supplied category: " + brief.category : "",
+      "No exact public product source could be verified. Use only the literal product type, size, quantity, model, or other attributes explicitly stated in the supplied name/category. Do not add ingredients, materials, compatibility, performance, efficacy, certifications, warranty, origin, or accessories.",
+      "If a detail is not explicit in the supplied information, omit it. Prefer accurate copy over invented selling points.",
+    ].filter(Boolean).join("\n");
+    return {
+      brief: {
+        ...brief,
+        brand: brief.brand.trim() || brandHint,
+        features: suppliedFacts,
+        featuresAr: brief.featuresAr.trim(),
+        keywords: brief.keywords.trim() || brief.name,
+      },
+      sources: [],
+    };
   }
   // Do not spend a separate Groq request asking the model to summarize sources.
   // Pass the readable source excerpts into the one listing-generation request;
   // the listing model can write both languages directly from those excerpts.
-  const sourceFacts = readablePages.slice(0, 3).map((item, i) => {
-    // The RVRS catalogue is an index, not a detailed product page. Pass only
-    // the exact matching catalogue entry so the model cannot borrow claims
-    // from neighboring products in the same list.
-    if (item.url.includes("frppr.com/brands/rvrs")) {
-      const wanted = normalizeResearchMatchText(brief.name).split(/\s+/).filter((token) => token.length > 2);
-      const matchingLines = item.page.split(/\r?\n/).filter((line) => {
-        const normalized = normalizeResearchMatchText(line);
-        return wanted.length > 0 && wanted.every((token) => normalized.includes(token));
-      });
-      return "[Catalogue identity check only — confirms the listed product name/category/pack size, not product features or performance claims] " +
-        item.url + "\n" + matchingLines.join("\n");
-    }
-    return "[Verified public source " + (i + 1) + "] " + item.url + "\n" + item.page;
-  }).join("\n\n").slice(0, 8500);
+  const sourceFacts = readablePages.slice(0, 3).map((item, i) =>
+    "[Public product source " + (i + 1) + "] " + item.url + "\n" + item.page
+  ).join("\n\n").slice(0, 8500);
   const features = brief.features.trim() || sourceFacts;
   const researched: ProductBrief = {
     ...brief,
@@ -767,7 +757,7 @@ Return exactly this JSON shape:
     researchedBrief = research.brief;
   }
   if (!researchedBrief.features.trim() && !researchedBrief.featuresAr.trim()) {
-    throw new Error("No reliable product facts were found in public sources. Add a brand or model number and retry.");
+    throw new Error("Add a product name or at least one confirmed product detail before generating this row.");
   }
   const raw = await callListingJson(p, SYSTEM, userPrompt(researchedBrief, m, tone, "", tail));
   const initialContent = toListing(raw, m);
