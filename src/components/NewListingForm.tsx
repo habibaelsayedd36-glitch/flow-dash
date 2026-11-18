@@ -54,7 +54,7 @@ export function NewListingForm({ locale, products }: { locale: Locale; products:
         {pending ? <Loader2 size={16} className="animate-spin" aria-hidden /> : <Sparkles size={16} aria-hidden />}
         {pending ? t.listings.generating : t.listings.generate}
       </button>
-      {state.error && <p role="alert" className="text-sm text-danger md:col-span-4">{t.common.failed}</p>}
+      {state.error && <p role="alert" className="text-sm text-danger md:col-span-4">{state.error}</p>}
     </form>
   );
 }
