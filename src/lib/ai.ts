@@ -273,9 +273,10 @@ async function post(url: string, headers: Record<string, string>, body: unknown,
     if (!res.ok) {
       const err = (data as { error?: { message?: string } } | null)?.error?.message;
       const message = `${who} (${res.status}): ${err || res.statusText || "request failed"}`;
-      if (retryable.has(res.status) && attempt < 2) {
-        // Respect provider reset guidance (especially Groq's TPM window) instead
-        // of retrying too early and falling straight back to the template engine.
+      const dailyTokenLimit = /tokens per day|daily token|TPD/i.test(err || "");
+      if (retryable.has(res.status) && attempt < 2 && !dailyTokenLimit) {
+        // Short-window limits can reset quickly; daily token caps cannot.
+        // Do not waste retries waiting on a daily cap — let the model fallback run.
         await new Promise((resolve) => setTimeout(resolve, retryDelayMs(res, data, attempt)));
         continue;
       }
@@ -324,10 +325,27 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
       data = (await requestChat(p.model)) as typeof data;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      // A 120B TPM/rate-limit failure must not discard the whole listing.
-      // Retry once with Groq's smaller GPT-OSS model using the same connected key.
-      if (p.id !== "groq" || p.model === "openai/gpt-oss-20b" || !["(429):", "(500):", "(502):", "(503):", "(504):"].some((status) => message.includes(status))) throw error;
-      data = (await requestChat("openai/gpt-oss-20b")) as typeof data;
+      const retryableFailure = ["(429):", "(500):", "(502):", "(503):", "(504):"].some((status) => message.includes(status));
+      if (p.id !== "groq" || !retryableFailure || p.model === "qwen/qwen3.8-27b") throw error;
+
+      // The two GPT-OSS models share the same free-tier daily token ceiling.
+      // If 120B is capped, try 20B once, then use Qwen 3.8 as a separate
+      // fallback pool. Keep the same connected Groq key; no new key is needed.
+      const fallbacks = p.model === "openai/gpt-oss-120b"
+        ? ["openai/gpt-oss-20b", "qwen/qwen3.8-27b"]
+        : ["qwen/qwen3.8-27b"];
+      let lastError: unknown = error;
+      let recovered = false;
+      for (const fallbackModel of fallbacks) {
+        try {
+          data = (await requestChat(fallbackModel)) as typeof data;
+          recovered = true;
+          break;
+        } catch (fallbackError) {
+          lastError = fallbackError;
+        }
+      }
+      if (!recovered) throw lastError;
     }
     const choice = data.choices?.[0];
     text = choice?.message?.content ?? "";
@@ -359,8 +377,9 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
   if (!text.trim()) {
     // Groq may occasionally return an empty assistant message from GPT-OSS 120B.
     // Retry once on the smaller supported GPT-OSS model before falling back to templates.
-    if (p.id === "groq" && p.model !== "openai/gpt-oss-20b") {
-      return callModel({ ...p, model: "openai/gpt-oss-20b" }, system, user, json);
+    if (p.id === "groq" && p.model !== "qwen/qwen3.8-27b") {
+      const fallbackModel = p.model === "openai/gpt-oss-120b" ? "openai/gpt-oss-20b" : "qwen/qwen3.8-27b";
+      return callModel({ ...p, model: fallbackModel }, system, user, json);
     }
     throw new Error(`${p.label}: empty response from ${p.model}. The automatic Groq fallback model also returned no text.`);
   }
