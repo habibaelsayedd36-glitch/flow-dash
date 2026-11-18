@@ -159,7 +159,7 @@ Product brief:
 - Brand: ${p.brand || "(none)"}
 - Product name (English): ${p.name}
 - Product name (Arabic): ${p.nameAr || "(not provided — write it)"}
-- Category: ${p.category}
+- Category: ${p.category === "auto" ? "Infer the exact category from the verified product research above; do not assume a default category." : p.category}
 - Key features (English):
 ${p.features || "(none provided)"}
 - Key features (Arabic):
