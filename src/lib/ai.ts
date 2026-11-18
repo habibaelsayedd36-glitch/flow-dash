@@ -355,7 +355,14 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
     }
     text = (data.candidates?.[0]?.content?.parts ?? []).map((x) => x.text ?? "").join("");
   }
-  if (!text.trim()) throw new Error(`${p.label}: empty response.`);
+  if (!text.trim()) {
+    // Groq may occasionally return an empty assistant message from GPT-OSS 120B.
+    // Retry once on the smaller supported GPT-OSS model before falling back to templates.
+    if (p.id === "groq" && p.model !== "openai/gpt-oss-20b") {
+      return callModel({ ...p, model: "openai/gpt-oss-20b" }, system, user, json);
+    }
+    throw new Error(`${p.label}: empty response from ${p.model}. The automatic Groq fallback model also returned no text.`);
+  }
   return text;
 }
 
