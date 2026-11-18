@@ -568,7 +568,7 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
         signal: AbortSignal.timeout(18_000),
         cache: "no-store",
       });
-      if (!response.ok) return { ...result, page: "" };
+      if (!response.ok) throw new Error("Direct product page unavailable");
       const html = await response.text();
       const page = htmlToResearchText(html).slice(0, 9000);
       if (page.length > 300) return { ...result, page };
@@ -576,7 +576,7 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
     // Shopify exposes a structured product endpoint that is often readable
     // even when its storefront HTML or Reader conversion is not.
     try {
-      const jsonUrl = result.url.replace(/\\/$/, "") + ".js";
+      const jsonUrl = result.url.replace(/\/$/, "") + ".js";
       const response = await fetch(jsonUrl, {
         headers: { accept: "application/json" },
         signal: AbortSignal.timeout(12_000),
@@ -590,7 +590,7 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
           product.product_type ? "Category: " + product.product_type : "",
           product.tags?.length ? "Tags: " + product.tags.join(", ") : "",
           htmlToResearchText(product.description || product.body_html || ""),
-        ].filter(Boolean).join("\\n").slice(0, 9000);
+        ].filter(Boolean).join("\n").slice(0, 9000);
         if (page.length > 300) return { ...result, page };
       }
     } catch { /* no readable source available */ }
