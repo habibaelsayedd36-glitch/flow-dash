@@ -2,6 +2,7 @@ import { MessageCircle, Users } from "lucide-react";
 import type { Metadata } from "next";
 import { ClientForm } from "@/components/ClientForm";
 import { ShareLink } from "@/components/PortalClient";
+import { DeleteClientButton } from "@/components/DeleteClientButton";
 import { Empty, MarketBadge, PageHeader, StatusPill, SubNav } from "@/components/ui";
 import { PLANS, waLink, type PlanId } from "@/lib/catalog";
 import { getClients } from "@/lib/data";
@@ -107,6 +108,7 @@ export default async function ClientsPage() {
                   </div>
                   <div className="col-span-2 flex items-center justify-between gap-2 xl:col-span-1">
                     <StatusPill status={cl.status} text={label(t.clientStatus, cl.status)} />
+                    <DeleteClientButton clientId={cl.id} clientName={cl.name} />
                     {cl.phone && (
                       <a href={waLink(cl.phone, "")} target="_blank" rel="noopener noreferrer" className="btn btn-ghost btn-icon" aria-label={`${c.whatsapp}: ${cl.name}`} title={c.whatsapp}>
                         <MessageCircle size={15} aria-hidden />
