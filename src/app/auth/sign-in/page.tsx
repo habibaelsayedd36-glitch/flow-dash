@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createAuthClient } from "@neon/auth/next";
 
@@ -44,36 +45,17 @@ export default function SignInPage() {
         <form onSubmit={submit} className="space-y-5">
           <label className="block text-sm font-medium">
             Email address
-            <input
-              type="email"
-              autoComplete="username"
-              required
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              className="mt-2 h-12 w-full rounded-xl border border-[#dce4dc] bg-white px-4 text-sm outline-none transition focus:border-[#315e42] focus:ring-4 focus:ring-[#315e42]/10"
-              placeholder="name@company.com"
-            />
+            <input type="email" autoComplete="username" required value={email} onChange={(event) => setEmail(event.target.value)} className="mt-2 h-12 w-full rounded-xl border border-[#dce4dc] bg-white px-4 text-sm outline-none transition focus:border-[#315e42] focus:ring-4 focus:ring-[#315e42]/10" placeholder="name@company.com" />
           </label>
           <label className="block text-sm font-medium">
             Password
-            <input
-              type="password"
-              autoComplete="current-password"
-              required
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              className="mt-2 h-12 w-full rounded-xl border border-[#dce4dc] bg-white px-4 text-sm outline-none transition focus:border-[#315e42] focus:ring-4 focus:ring-[#315e42]/10"
-              placeholder="Enter your password"
-            />
+            <input type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} className="mt-2 h-12 w-full rounded-xl border border-[#dce4dc] bg-white px-4 text-sm outline-none transition focus:border-[#315e42] focus:ring-4 focus:ring-[#315e42]/10" placeholder="Enter your password" />
           </label>
+          <div className="-mt-2 text-right">
+            <Link href="/auth/forgot-password" className="text-sm font-medium text-[#315e42] hover:underline">Forgot password?</Link>
+          </div>
           {error && <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
-          <button
-            type="submit"
-            disabled={busy}
-            className="h-12 w-full rounded-xl bg-[#183c2b] px-4 text-sm font-semibold text-white transition hover:bg-[#24543b] disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {busy ? "Signing in…" : "Sign in"}
-          </button>
+          <button type="submit" disabled={busy} className="h-12 w-full rounded-xl bg-[#183c2b] px-4 text-sm font-semibold text-white transition hover:bg-[#24543b] disabled:cursor-not-allowed disabled:opacity-60">{busy ? "Signing in…" : "Sign in"}</button>
         </form>
         <p className="mt-7 text-center text-xs leading-5 text-[#849087]">Access is limited to invited FLOW team members.</p>
       </section>
