@@ -299,30 +299,36 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
     text = (data.content ?? []).filter((b) => b.type === "text").map((b) => b.text ?? "").join("");
   } else if (p.id === "openai" || p.id === "groq") {
     const endpoint = p.id === "groq" ? "https://api.groq.com/openai/v1/chat/completions" : "https://api.openai.com/v1/chat/completions";
-    const data = (await post(
+    const requestChat = (model: string) => post(
       endpoint,
       { authorization: `Bearer ${p.key}` },
       {
-        model: p.model,
+        model,
         // GPT-OSS spends completion tokens on hidden reasoning before visible copy.
-        // A larger budget plus low reasoning effort prevents empty replies caused by
-        // exhausting the 1,800-token cap before the listing JSON is emitted.
         ...(p.id === "groq"
           ? {
-              max_completion_tokens: p.model.includes("gpt-oss") ? 4096 : 1800,
-              ...(p.model.includes("gpt-oss") ? { reasoning_effort: "low" } : {}),
+              max_completion_tokens: model.includes("gpt-oss") ? 4096 : 1800,
+              ...(model.includes("gpt-oss") ? { reasoning_effort: "low" } : {}),
             }
           : {}),
         messages: [
           { role: "system", content: system },
           { role: "user", content: user },
         ],
-        // Groq can reject otherwise valid generations during constrained JSON-mode validation.
-        // Keep the JSON-only instruction in the prompt and parse/repair the returned text ourselves.
         ...(json && p.id !== "groq" ? { response_format: { type: "json_object" } } : {}),
       },
       p.label,
-    )) as { choices?: { finish_reason?: string; message?: { content?: string } }[]; usage?: { completion_tokens?: number; completion_tokens_details?: { reasoning_tokens?: number } } };
+    );
+    let data: { choices?: { finish_reason?: string; message?: { content?: string } }[]; usage?: { completion_tokens?: number; completion_tokens_details?: { reasoning_tokens?: number } } };
+    try {
+      data = (await requestChat(p.model)) as typeof data;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      // A 120B TPM/rate-limit failure must not discard the whole listing.
+      // Retry once with Groq's smaller GPT-OSS model using the same connected key.
+      if (p.id !== "groq" || p.model === "openai/gpt-oss-20b" || !/\\((?:429|500|502|503|504)\\):/.test(message)) throw error;
+      data = (await requestChat("openai/gpt-oss-20b")) as typeof data;
+    }
     const choice = data.choices?.[0];
     text = choice?.message?.content ?? "";
     // Do not throw on an empty GPT-OSS response here: the shared empty-response
