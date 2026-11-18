@@ -78,7 +78,7 @@ const GROUPS: { label: string | null; items: Item[] }[] = [
   },
 ];
 
-export function AppNav() {
+export function AppNav({ userName, userEmail }: { userName: string; userEmail: string }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
@@ -137,7 +137,7 @@ export function AppNav() {
     </nav>
   );
 
-  const footer = <div className="mt-auto border-t border-border px-2 pt-4"><p className="text-xs leading-relaxed text-muted-foreground">Sample data. Swap in your own clients and products.</p><SignOutButton /></div>;
+  const footer = <div className="mt-auto border-t border-border px-2 pt-4"><div className="mb-3 min-w-0"><p className="truncate text-sm font-semibold text-foreground">{userName || "FLOW team"}</p>{userEmail && <p className="mt-0.5 truncate text-xs text-muted-foreground">{userEmail}</p>}</div><SignOutButton /></div>;
 
   return (
     <>
