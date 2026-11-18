@@ -173,7 +173,25 @@ export async function processJobItemAction(jobId: number, index: number): Promis
     return { ok: false, pause: true };
   }
   try {
-    const made = await generateJobItem(provider, brief, m, job.tone, known, unknown);
+    // Retry transient research/provider failures automatically for this row.
+    // Quota errors are deliberately not retried here: they pause the batch so
+    // we do not burn the provider's remaining quota or duplicate successful rows.
+    let made: Awaited<ReturnType<typeof generateJobItem>> | null = null;
+    let lastError: unknown = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        made = await generateJobItem(provider, brief, m, job.tone, known, unknown);
+        break;
+      } catch (error) {
+        lastError = error;
+        const message = error instanceof Error ? error.message : String(error);
+        const quota = /429|rate.?limit|quota|tokens per (minute|day)|tpm|tpd|too many requests/i.test(message);
+        const transient = /fetch failed|network|timeout|timed out|502|503|504|temporarily unavailable|could not reach its public product research service|internal server error|service unavailable/i.test(message);
+        if (quota || !transient || attempt === 2) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 700 * (attempt + 1)));
+      }
+    }
+    if (!made) throw lastError instanceof Error ? lastError : new Error("Listing generation failed after automatic retries.");
     const listingContent = made.content;
     if (!listingContent) throw new Error("The AI provider returned no listing content.");
     const out: JobItem = {
