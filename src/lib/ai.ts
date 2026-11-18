@@ -512,7 +512,9 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
   // indexing. Use the official Dermaelle catalogue as a fallback so a misspelled
   // product name can still be matched against the manufacturer's actual names.
   if (/dermaelle/i.test(brandHint + " " + brief.name)) {
+    const before = results.length;
     addResult("https://e-dermaelle.com/collections/all", "Dermaelle official product catalogue");
+    if (results.length > before) results.unshift(results.pop()!);
   }
   if (!results.length && !searchWasAvailable) throw new Error("FLOW could not reach its public product research service. Please retry in a moment.");
   if (!results.length) throw new Error("FLOW could not find public product sources for this exact name. Add a brand or model number and retry.");
