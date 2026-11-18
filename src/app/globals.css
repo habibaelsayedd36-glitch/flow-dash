@@ -83,6 +83,7 @@
 }
 
 :root {
+  font-size: 16.5px;
   --ff-display: var(--font-funnel), var(--font-cairo), system-ui, sans-serif;
   --ff-body: var(--font-didact), var(--font-cairo), system-ui, sans-serif;
 }
