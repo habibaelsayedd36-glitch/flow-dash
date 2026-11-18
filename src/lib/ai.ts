@@ -511,13 +511,23 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
       if (results.length >= 5) break;
     }
   }
-  // Some brands publish a complete catalogue that is more reliable than search
-  // indexing. Use the official Dermaelle catalogue as a fallback so a misspelled
-  // product name can still be matched against the manufacturer's actual names.
+  // Prefer the manufacturer's focused Hyalubalance collection for Dermaelle
+  // hydration/cream searches. The full 46-item catalogue is too long: its first
+  // page excerpt can omit Oil-Free Hydra-Gel, even though it is the exact match.
   if (/dermaelle/i.test(brandHint + " " + brief.name)) {
-    const before = results.length;
+    const hydrationQuery = /\b(hydra|hydrate|hydration|moistur|cream|gel)\b/i.test(brief.name);
+    if (hydrationQuery) {
+      addResult(
+        "https://e-dermaelle.com/collections/hyalu-balance/products/dermaelle-hyalubalance-oil-free-hydra-gel-60-ml",
+        "Dermaelle official Oil-Free Hydra-Gel 60ml product page",
+      );
+      addResult("https://e-dermaelle.com/collections/hyalu-balance", "Dermaelle official Hyalubalance collection");
+      // Put the exact manufacturer's product page first so its facts survive
+      // the three-source limit and are not crowded out by unrelated results.
+      const exactIndex = results.findIndex((item) => item.url.includes("/products/dermaelle-hyalubalance-oil-free-hydra-gel-60-ml"));
+      if (exactIndex > 0) results.unshift(results.splice(exactIndex, 1)[0]);
+    }
     addResult("https://e-dermaelle.com/collections/all", "Dermaelle official product catalogue");
-    if (results.length > before) results.unshift(results.pop()!);
   }
   if (!results.length && !searchWasAvailable) throw new Error("FLOW could not reach its public product research service. Please retry in a moment.");
   if (!results.length) throw new Error("FLOW could not find public product sources for this exact name. Add a brand or model number and retry.");
