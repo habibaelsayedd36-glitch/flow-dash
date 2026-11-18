@@ -25,6 +25,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Brand } from "./Brand";
+import { SignOutButton } from "./SignOutButton";
 
 type Item = { href: string; label: string; icon: LucideIcon; also?: string[] };
 
@@ -136,7 +137,7 @@ export function AppNav() {
     </nav>
   );
 
-  const footer = <p className="mt-auto border-t border-border px-2 pt-4 text-xs leading-relaxed text-muted-foreground">Sample data. Swap in your own clients and products.</p>;
+  const footer = <div className="mt-auto border-t border-border px-2 pt-4"><p className="text-xs leading-relaxed text-muted-foreground">Sample data. Swap in your own clients and products.</p><SignOutButton /></div>;
 
   return (
     <>
