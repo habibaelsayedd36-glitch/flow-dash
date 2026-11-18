@@ -1,7 +1,7 @@
 import { and, asc, count, desc, eq, gte, inArray, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { ensureDb } from "@/db/ensure";
-import { adCampaigns, clients, healthChecks, keywords, leads, listings, orders, products, reviews, type Listing } from "@/db/schema";
+import { adCampaigns, clients, healthChecks, keywords, leads, listings, orders, products, reviews, statements, type Listing } from "@/db/schema";
 import { cairoMonth } from "./catalog";
 
 /**
@@ -221,4 +221,35 @@ export async function getGrowthOverview() {
     leadsNew: lead?.n ?? 0,
     reviewsOpen: review?.n ?? 0,
   };
+}
+
+
+/** FLOW cash actually collected, grouped by Cairo calendar day. */
+export async function getCashflowOverview() {
+  await ensureDb();
+  const rows = await db.select({ total: statements.total, paid: statements.paid, paidAt: statements.paidAt })
+    .from(statements);
+  const now = new Date();
+  const month = cairoMonth(now);
+  const [year, mm] = month.split("-").map(Number);
+  const daysInMonth = new Date(Date.UTC(year, mm, 0)).getUTCDate();
+  const daily = Array.from({ length: daysInMonth }, (_, i) => ({ day: i + 1, amount: 0 }));
+  let collected = 0;
+  let outstanding = 0;
+  const byMonth = new Map<string, number>();
+  for (const row of rows) {
+    if (row.paid && row.paidAt) {
+      const key = cairoMonth(row.paidAt);
+      byMonth.set(key, (byMonth.get(key) ?? 0) + row.total);
+      if (key === month) {
+        collected += row.total;
+        const day = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Cairo", day: "2-digit" }).format(row.paidAt));
+        if (daily[day - 1]) daily[day - 1].amount += row.total;
+      }
+    } else if (!row.paid) {
+      outstanding += row.total;
+    }
+  }
+  const prev = mm === 1 ? `${year - 1}-12` : `${year}-${String(mm - 1).padStart(2, "0")}`;
+  return { month, daily, collected, outstanding, previousCollected: byMonth.get(prev) ?? 0 };
 }
