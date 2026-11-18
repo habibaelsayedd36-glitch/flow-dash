@@ -5,7 +5,7 @@ import { auth } from "@/lib/auth/server";
 import { GridPattern } from "@/components/Brand";
 import { Empty, MarketBadge, PageHeader, RunItem, ScoreBadge, StatCard, pname, taskTitle } from "@/components/ui";
 import { getClients, getOverview, getRuns, getTasks } from "@/lib/data";
-import { getGrowthOverview } from "@/lib/data-growth";
+import { getCashflowOverview, getGrowthOverview } from "@/lib/data-growth";
 import { label, num, shortDate, tpl } from "@/lib/i18n";
 import { getI18n } from "@/lib/locale";
 
@@ -18,7 +18,7 @@ export default async function OverviewPage() {
   if (!session?.user) redirect("/auth/sign-in");
 
   const { locale, t } = await getI18n();
-  const [o, g, tasks, runs, clients] = await Promise.all([getOverview(), getGrowthOverview(), getTasks({ done: false, limit: 5 }), getRuns(6), getClients()]);
+  const [o, g, cash, tasks, runs, clients] = await Promise.all([getOverview(), getGrowthOverview(), getCashflowOverview(), getTasks({ done: false, limit: 5 }), getRuns(6), getClients()]);
   const maxStage = Math.max(1, ...o.stages.map((s) => s.n));
   const withQuota = clients.filter((c) => c.quota).sort((a, b) => b.used / (b.quota ?? 1) - a.used / (a.quota ?? 1));
   const now = Date.now();
@@ -78,6 +78,46 @@ export default async function OverviewPage() {
           <StatCard href="/orders" label="Orders, last 30 days" value={num(g.orders)} hint={`Revenue: ${num(g.revenue)} EGP`} />
           <StatCard href="/inventory" label="Low or out of stock" value={num(g.lowStock)} hint="At or under the reorder point" />
           <StatCard href="/reviews" label="Reviews to answer" value={num(g.reviewsOpen)} hint="3 stars or fewer" />
+        </div>
+      </section>
+
+      <section className="mt-6" aria-labelledby="cashflow-title">
+        <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+          <h2 id="cashflow-title" className="eyebrow">Cashflow · {cash.month}</h2>
+          <Link href="/billing" className={LINK}>View billing</Link>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="card p-5">
+            <p className="text-[13px] text-mute">Collected this month</p>
+            <p className="num mt-3 font-display text-3xl font-bold text-flow-green">{num(cash.collected)} <span className="text-sm font-medium text-mute">EGP</span></p>
+          </div>
+          <div className="card p-5">
+            <p className="text-[13px] text-mute">Outstanding invoices</p>
+            <p className="num mt-3 font-display text-3xl font-bold text-flow-green">{num(cash.outstanding)} <span className="text-sm font-medium text-mute">EGP</span></p>
+          </div>
+          <div className="card p-5">
+            <p className="text-[13px] text-mute">Previous month collected</p>
+            <p className="num mt-3 font-display text-3xl font-bold text-flow-green">{num(cash.previousCollected)} <span className="text-sm font-medium text-mute">EGP</span></p>
+          </div>
+        </div>
+        <div className="card mt-4 p-5 sm:p-6">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="h-section">Daily cash received</h3>
+            <span className="num text-sm text-mute">{num(cash.collected)} EGP total</span>
+          </div>
+          <div className="mt-5 flex h-44 items-end gap-1.5 overflow-x-auto pb-1" role="img" aria-label="Daily collected cash chart">
+            {cash.daily.map((d) => {
+              const peak = Math.max(1, ...cash.daily.map((x) => x.amount));
+              const height = d.amount ? Math.max(5, (d.amount / peak) * 100) : 2;
+              return (
+                <div key={d.day} className="group flex min-w-0 flex-1 flex-col items-center justify-end gap-1" title={`Day ${d.day}: ${num(d.amount)} EGP`}>
+                  <div className="w-full rounded-t bg-flow-green-light transition-opacity group-hover:opacity-70" style={{ height: `${height}%`, minHeight: d.amount ? 5 : 2 }} />
+                  <span className="num text-[10px] text-mute">{d.day}</span>
+                </div>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-xs text-mute">Only invoices marked as paid are counted. Marking an invoice paid records its collection date.</p>
         </div>
       </section>
 
