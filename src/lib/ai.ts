@@ -445,7 +445,7 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
       } else {
         const blocks = searchText.split(/class=["']result(?:\s|")/i).slice(1, 9);
         for (const block of blocks) {
-          const anchor = block.match(/<a[^>]*class=["'][^"']*result__a[^"']*["'][^>]*href=["']([^"']+)["'][^>]*>([\\s\\S]*?)<\\/a>/i);
+          const anchor = block.match(/<a[^>]*class=["'][^"']*result__a[^"']*["'][^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/i);
           if (!anchor) continue;
           let href = decodeResearchHtml(anchor[1]);
           try {
@@ -455,7 +455,7 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
             const targetUrl = new URL(target);
             if (!["http:", "https:"].includes(targetUrl.protocol) || /youtube\.com|youtu\.be|facebook\.com|instagram\.com|tiktok\.com|pinterest\./i.test(targetUrl.hostname)) continue;
             const title = decodeResearchHtml(anchor[2].replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
-            const snippetMatch = block.match(/class=["'][^"']*result__snippet[^"']*["'][^>]*>([\\s\\S]*?)<\\/(?:a|td|div)>/i);
+            const snippetMatch = block.match(/class=["'][^"']*result__snippet[^"']*["'][^>]*>([\s\S]*?)<\/(?:a|td|div)>/i);
             const snippet = snippetMatch ? decodeResearchHtml(snippetMatch[1].replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim() : "";
             if (title && !results.some((entry) => entry.url === targetUrl.href)) results.push({ url: targetUrl.href, title, snippet });
           } catch { /* ignore malformed search results */ }
