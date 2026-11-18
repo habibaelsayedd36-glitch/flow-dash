@@ -370,7 +370,7 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
       },
       p.label,
     );
-    let data: { candidates?: { content?: { parts?: { text?: string }[] } }[] };
+    let data: { candidates?: { content?: { parts?: { text?: string }[] } }[] } = {};
     try {
       data = (await requestGemini(primaryModel)) as typeof data;
     } catch (error) {
