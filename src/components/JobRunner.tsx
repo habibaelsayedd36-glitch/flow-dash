@@ -151,7 +151,7 @@ export function JobRunner({ jobId, items, hasClient, clientName, imported, statu
           </a>
           {(failed.length > 0 || status === "paused") && <button type="button" className="btn btn-primary" onClick={retryFailed} disabled={busy !== ""}>{status === "paused" ? "Resume saved batch" : `Retry ${failed.length} failed rows`}</button>}
           {hasClient && (
-            <button type="button" className="btn btn-ghost" onClick={addToPipeline} disabled={imported || busy !== ""}>
+            <button type="button" className="btn btn-ghost" onClick={addToPipeline} disabled={imported || busy !== "" || failed.length > 0 || pending.length > 0}>
               {busy === "import" ? <Loader2 size={16} className="animate-spin" aria-hidden /> : imported ? <Check size={16} aria-hidden /> : <PackagePlus size={16} aria-hidden />}
               {imported ? "Added to pipeline" : "Add to pipeline"}
             </button>
