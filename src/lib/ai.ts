@@ -529,28 +529,44 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
     "https://r.jina.ai/http://www.google.com/search?q=" + encodeURIComponent(query),
     "https://r.jina.ai/http://www.bing.com/search?q=" + encodeURIComponent(query),
   ]);
-  for (const searchUrl of readerSearchUrls) {
+  const readSearchPage = async (searchUrl: string): Promise<string | null> => {
     try {
       const response = await fetch(searchUrl, {
         headers: { accept: "text/plain, text/markdown, */*" },
         signal: AbortSignal.timeout(20_000),
         cache: "no-store",
       });
-      if (!response.ok) continue;
-      searchWasAvailable = true;
-      const text = (await response.text()).slice(0, 35_000);
-      const markdownLinks = /\[([^\]]{3,240})\]\((https?:\/\/[^)\s]+)\)/g;
-      for (const match of text.matchAll(markdownLinks)) {
-        addResult(match[2], match[1], "");
+      if (!response.ok) return null;
+      return (await response.text()).slice(0, 35_000);
+    } catch {
+      return null;
+    }
+  };
+  const addSearchPage = (text: string) => {
+    searchWasAvailable = true;
+    const markdownLinks = /\[([^\]]{3,240})\]\((https?:\/\/[^)\s]+)\)/g;
+    for (const match of text.matchAll(markdownLinks)) addResult(match[2], match[1], "");
+    // Reader may return plain URLs instead of Markdown links for some pages.
+    if (!results.length) {
+      for (const match of text.matchAll(/https?:\/\/[^\s<>"]+/g)) {
+        addResult(match[0], text.slice(Math.max(0, match.index! - 160), match.index!).split("\n").filter(Boolean).slice(-1)[0] || "Product source", "");
       }
-      // Reader may return plain URLs instead of Markdown links for some pages.
-      if (!results.length) {
-        for (const match of text.matchAll(/https?:\/\/[^\s<>"]+/g)) {
-          addResult(match[0], text.slice(Math.max(0, match.index! - 160), match.index!).split("\n").filter(Boolean).slice(-1)[0] || "Product source", "");
-        }
-      }
+    }
+  };
+
+  // Google and Bing for the exact product-name query are fetched together.
+  // This removes one full network round-trip from the common successful path.
+  const firstPages = await Promise.all(readerSearchUrls.slice(0, 2).map(readSearchPage));
+  for (const page of firstPages) if (page) addSearchPage(page);
+
+  // Only fan out to broader queries if the exact-name search did not return
+  // enough candidates. Keep the fallback path conservative and bounded.
+  if (results.length < 8) {
+    for (const searchUrl of readerSearchUrls.slice(2)) {
+      const page = await readSearchPage(searchUrl);
+      if (page) addSearchPage(page);
       if (results.length >= 8) break;
-    } catch { /* try the next search route */ }
+    }
   }
 
   // Keep direct RSS/HTML providers as secondary fallbacks, but never depend
