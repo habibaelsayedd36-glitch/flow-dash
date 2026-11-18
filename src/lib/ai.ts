@@ -322,7 +322,7 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
         ...(json && p.id !== "groq" ? { response_format: { type: "json_object" } } : {}),
       },
       p.label,
-    )) as { choices?: { message?: { content?: string } }[] };
+    )) as { choices?: { finish_reason?: string; message?: { content?: string } }[]; usage?: { completion_tokens?: number; completion_tokens_details?: { reasoning_tokens?: number } } };
     const choice = data.choices?.[0];
     text = choice?.message?.content ?? "";
     if (!text.trim() && p.id === "groq") {
