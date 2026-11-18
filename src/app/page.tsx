@@ -25,9 +25,9 @@ export default async function OverviewPage() {
           <Plus size={16} aria-hidden />
           {t.overview.addProduct}
         </Link>
-        <Link href="/studio" className="btn btn-primary">
+        <Link href="/tools/listing" className="btn btn-primary">
           <Sparkles size={16} aria-hidden />
-          {t.overview.newListing}
+          Bulk Listing
         </Link>
       </PageHeader>
 
