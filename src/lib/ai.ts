@@ -489,18 +489,18 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
           searchWasAvailable = true;
           const searchText = await response.text();
           if (/format=rss/i.test(searchUrl)) {
-            const items = searchText.match(/<item\\b[\\s\\S]*?<\\/item>/gi) ?? [];
+            const items = searchText.match(/<item\b[\s\S]*?<\/item>/gi) ?? [];
             for (const item of items) {
               const getTag = (tag: string) => item.match(new RegExp("<" + tag + "[^>]*>([\\s\\S]*?)</" + tag + ">", "i"))?.[1] ?? "";
-              const rawUrl = getTag("link").replace(/<!\\[CDATA\\[|\\]\\]>/g, "").trim();
-              const title = getTag("title").replace(/<!\\[CDATA\\[|\\]\\]>/g, "").replace(/<[^>]+>/g, " ").trim();
-              const snippet = getTag("description").replace(/<!\\[CDATA\\[|\\]\\]>/g, "").replace(/<[^>]+>/g, " ").trim();
+              const rawUrl = getTag("link").replace(/<!\[CDATA\[|\]\]>/g, "").trim();
+              const title = getTag("title").replace(/<!\[CDATA\[|\]\]>/g, "").replace(/<[^>]+>/g, " ").trim();
+              const snippet = getTag("description").replace(/<!\[CDATA\[|\]\]>/g, "").replace(/<[^>]+>/g, " ").trim();
               addResult(rawUrl, title, snippet);
             }
           } else {
-            const blocks = searchText.split(/class=["']result(?:\\s|")/i).slice(1, 9);
+            const blocks = searchText.split(/class=["']result(?:\s|")/i).slice(1, 9);
             for (const block of blocks) {
-              const anchor = block.match(/<a[^>]*class=["'][^"']*result__a[^"']*["'][^>]*href=["']([^"']+)["'][^>]*>([\\s\\S]*?)<\\/a>/i);
+              const anchor = block.match(/<a[^>]*class=["'][^"']*result__a[^"']*["'][^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/i);
               if (!anchor) continue;
               addResult(anchor[1], anchor[2], "");
             }
