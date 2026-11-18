@@ -1,3 +1,4 @@
+import { requireApiUser } from "@/lib/auth/server";
 import { and, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
