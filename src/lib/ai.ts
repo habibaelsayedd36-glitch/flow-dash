@@ -325,14 +325,9 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
     )) as { choices?: { finish_reason?: string; message?: { content?: string } }[]; usage?: { completion_tokens?: number; completion_tokens_details?: { reasoning_tokens?: number } } };
     const choice = data.choices?.[0];
     text = choice?.message?.content ?? "";
-    if (!text.trim() && p.id === "groq") {
-      const finish = choice?.finish_reason ?? "unknown";
-      const used = (data as { usage?: { completion_tokens?: number; completion_tokens_details?: { reasoning_tokens?: number } } }).usage;
-      const reasoning = used?.completion_tokens_details?.reasoning_tokens;
-      if (finish === "length") {
-        throw new Error(`${p.label}: response budget was consumed before visible text was generated (reasoning tokens: ${reasoning ?? "unknown"}). Retry generation; GPT-OSS now uses a larger output budget and low reasoning effort.`);
-      }
-    }
+    // Do not throw on an empty GPT-OSS response here: the shared empty-response
+    // handler below must get a chance to retry with the smaller Groq model.
+    // Throwing on finish_reason="length" here accidentally bypassed that fallback.
   } else {
     const requestGemini = (model: string) => post(
       `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
