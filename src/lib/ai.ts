@@ -402,13 +402,103 @@ Required JSON shape:
   return repaired;
 }
 
+type ProductResearch = { brief: ProductBrief; sources: string[] };
+
+function decodeResearchHtml(value: string): string {
+  return value.replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'")
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+    .replace(/&#(\d+);/g, (_, n: string) => String.fromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n: string) => String.fromCodePoint(parseInt(n, 16)));
+}
+
+/** Researches an exact product name against public web results before copy is generated. */
+async function researchProductBrief(provider: AiProvider, brief: ProductBrief): Promise<ProductResearch> {
+  const query = [brief.brand, brief.name, "official product details ingredients specifications"].filter(Boolean).join(" ");
+  const searchResponse = await fetch("https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query), {
+    headers: { "user-agent": "Mozilla/5.0 (compatible; FLOWProductResearch/1.0)" },
+    signal: AbortSignal.timeout(12_000), cache: "no-store",
+  });
+  if (!searchResponse.ok) throw new Error("Product research search is temporarily unavailable. Please retry.");
+  const searchHtml = await searchResponse.text();
+  const results: Array<{ url: string; title: string; snippet: string }> = [];
+  const blocks = searchHtml.split(/class=["']result(?:\s|")/i).slice(1, 9);
+  for (const block of blocks) {
+    const anchor = block.match(/<a[^>]*class=["'][^"']*result__a[^"']*["'][^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/i);
+    if (!anchor) continue;
+    let href = decodeResearchHtml(anchor[1]);
+    try {
+      if (href.startsWith("//")) href = "https:" + href;
+      const parsedUrl = new URL(href);
+      const target = parsedUrl.searchParams.get("uddg") || href;
+      const targetUrl = new URL(target);
+      if (!["http:", "https:"].includes(targetUrl.protocol)) continue;
+      if (/youtube\.com|youtu\.be|facebook\.com|instagram\.com|tiktok\.com|pinterest\./i.test(targetUrl.hostname)) continue;
+      const title = decodeResearchHtml(anchor[2].replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+      const snippetMatch = block.match(/class=["'][^"']*result__snippet[^"']*["'][^>]*>([\s\S]*?)<\/(?:a|td|div)>/i);
+      const snippet = snippetMatch ? decodeResearchHtml(snippetMatch[1].replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim() : "";
+      if (title && !results.some((item) => item.url === targetUrl.href)) results.push({ url: targetUrl.href, title, snippet });
+    } catch { /* ignore malformed search results */ }
+  }
+  if (!results.length) throw new Error("FLOW could not find public product sources for this exact name. Add a brand or model number and retry.");
+
+  const pages = await Promise.all(results.slice(0, 5).map(async (result) => {
+    try {
+      const response = await fetch(result.url, {
+        headers: { "user-agent": "Mozilla/5.0 (compatible; FLOWProductResearch/1.0)" },
+        signal: AbortSignal.timeout(8_000), cache: "no-store",
+      });
+      if (!response.ok) return { ...result, page: "" };
+      const html = (await response.text()).slice(0, 500_000);
+      const title = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || result.title;
+      const description = html.match(/<meta[^>]+(?:name|property)=["'](?:description|og:description)["'][^>]+content=["']([^"']*)["']/i)?.[1] || "";
+      const body = html.replace(/<(script|style|svg|noscript)[^>]*>[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+      const page = decodeResearchHtml([title, description, body.slice(0, 7000)].join(" ")).slice(0, 6000);
+      return { ...result, page };
+    } catch { return { ...result, page: "" }; }
+  }));
+  const sourceText = pages.map((item, i) =>
+    "[Source " + (i + 1) + "] " + item.url + "\nSearch title: " + item.title + "\nSearch snippet: " + item.snippet + "\nPage text: " + (item.page || "(page could not be opened)")
+  ).join("\n\n").slice(0, 22_000);
+  const raw = await generateText(
+    provider,
+    "You are a strict product-fact researcher for e-commerce. Use only explicit facts present in the supplied public source excerpts. Prefer the manufacturer's official product page; use reputable retailers only when the exact product/model matches. Ignore unrelated products, sponsored claims that do not match the exact product, user reviews, and assumptions. Never infer ingredients, materials, sizes, certifications, medical benefits, compatibility, warranty, origin, or performance. Return JSON only.",
+    "Research this exact product and extract facts that are explicitly supported by the sources.\nProduct name: " + brief.name +
+    "\nBrand supplied: " + (brief.brand || "(unknown)") + "\nCategory supplied: " + (brief.category || "(unknown)") +
+    "\n\nSources:\n" + sourceText +
+    '\n\nReturn exactly this JSON:\n{"brand":"","category":"","featuresEn":[""],"featuresAr":[""],"keywords":[""]}\n' +
+    "Provide 3-8 concise facts only when directly supported by the sources. English and Arabic feature lists must describe the same facts in the same order. If no reliable matching facts exist, return empty feature arrays. Keywords may use the exact product name, confirmed brand, category and source wording only. Do not write sales copy or make claims beyond the source text."
+  );
+  const parsed = parseJson(raw);
+  const asLines = (value: unknown) => Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean).slice(0, 8).join("\n")
+    : "";
+  const features = brief.features.trim() || asLines(parsed.featuresEn);
+  const featuresAr = brief.featuresAr.trim() || asLines(parsed.featuresAr);
+  if (!features && !featuresAr) throw new Error("FLOW found no reliable product facts in the available sources, so it stopped rather than inventing features.");
+  const keywords = brief.keywords.trim() || (Array.isArray(parsed.keywords)
+    ? parsed.keywords.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean).slice(0, 15).join(", ")
+    : "");
+  const researched: ProductBrief = {
+    ...brief, brand: brief.brand.trim() || str(parsed.brand), category: brief.category.trim() || str(parsed.category),
+    features, featuresAr, keywords,
+  };
+  return { brief: researched, sources: pages.filter((item) => item.page || item.snippet).map((item) => item.url).slice(0, 5) };
+}
+
 export async function generateWithAi(p: AiProvider, brief: ProductBrief, m: Marketplace, tone: string, notes: string): Promise<ListingContent> {
+  let researchedBrief = brief;
+  let researchNotes = notes;
   if (!brief.features.trim() && !brief.featuresAr.trim()) {
-    throw new Error("Add confirmed product features before generating a listing. FLOW does not invent ingredients, benefits, specifications, or certifications from a product name or category.");
+    const research = await researchProductBrief(p, brief);
+    researchedBrief = research.brief;
+    researchNotes = [notes, "Product research sources (use only the confirmed facts already extracted above):\n" + research.sources.join("\n")].filter(Boolean).join("\n\n");
+  }
+  if (!researchedBrief.features.trim() && !researchedBrief.featuresAr.trim()) {
+    throw new Error("No confirmed product facts were found. FLOW will not invent ingredients, benefits, specifications, or certifications.");
   }
   const tail = `Return exactly this JSON shape:\n{${LISTING_SHAPE}}`;
-  const content = toListing(await callListingJson(p, SYSTEM, userPrompt(brief, m, tone, notes, tail)), m);
-  return repairShortBullets(p, brief, m, content, tail);
+  const generated = toListing(await callListingJson(p, SYSTEM, userPrompt(researchedBrief, m, tone, researchNotes, tail)), m);
+  return repairShortBullets(p, researchedBrief, m, generated, tail);
 }
 
 /** Spec fields a listing job tries to fill. Values that are not in the sheet are estimates. */
