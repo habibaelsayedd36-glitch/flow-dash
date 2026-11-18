@@ -27,7 +27,7 @@ import { LOCALE_COOKIE } from "@/lib/locale";
 import { getAiProvider, generateText } from "@/lib/ai";
 import { scoreListing, type ListingContent } from "@/lib/rules";
 
-export type FormState = { ok?: boolean; error?: "required" | "market" | "failed"; ran?: number };
+export type FormState = { ok?: boolean; error?: string; ran?: number };
 
 const str = (fd: FormData, key: string, max = 200) => String(fd.get(key) ?? "").trim().slice(0, max);
 const int = (v: unknown, min: number, max: number, fallback: number) => {
@@ -135,8 +135,11 @@ export async function generateListingAction(_prev: FormState, fd: FormData): Pro
     });
     await emit("listing_generated", { productId: product.id, clientId: product.clientId, listingId: made.listingId, score: made.score });
     target = `/listings/${made.listingId}${made.aiError ? `?ai_error=${encodeURIComponent(made.aiError.slice(0, 300))}` : ""}`;
-  } catch {
-    return { error: "failed" };
+  } catch (e) {
+    // Preserve the real generation failure so the UI can show whether this
+    // was a provider quota, unavailable research source, or database issue.
+    const message = e instanceof Error ? e.message : "Listing generation failed. Please retry.";
+    return { error: message.slice(0, 500) };
   }
   refresh();
   redirect(target);
