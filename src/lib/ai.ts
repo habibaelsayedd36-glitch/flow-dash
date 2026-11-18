@@ -448,7 +448,7 @@ function normalizeResearchMatchText(value: string): string {
 }
 
 function isRelevantResearchPage(
-  item: { title: string; page: string },
+  item: { title: string; snippet?: string; page: string },
   brief: ProductBrief,
   brandHint: string,
 ): boolean {
@@ -457,8 +457,11 @@ function isRelevantResearchPage(
     "cream", "gel", "serum", "lotion", "moisturizer", "moisturiser",
     "hydrating", "skin", "face", "ml", "oz",
   ]);
+  // Product names often appear after navigation, cookie banners, and store
+  // headers. Search the full readable page plus the search-result snippet;
+  // limiting this to the first 2,400 characters caused false negatives.
   const searchable = new Set(normalizeResearchMatchText(
-    item.title + " " + item.page.slice(0, 2400),
+    [item.title, item.snippet ?? "", item.page].join(" "),
   ).split(/\s+/).filter(Boolean));
   const brandTokens = normalizeResearchMatchText(brandHint).split(/\s+/)
     .filter((token) => token.length > 1);
