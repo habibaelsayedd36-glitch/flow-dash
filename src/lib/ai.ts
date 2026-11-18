@@ -320,7 +320,7 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
       },
       p.label,
     );
-    let data: { choices?: { finish_reason?: string; message?: { content?: string } }[]; usage?: { completion_tokens?: number; completion_tokens_details?: { reasoning_tokens?: number } } };
+    let data: { choices?: { finish_reason?: string; message?: { content?: string } }[]; usage?: { completion_tokens?: number; completion_tokens_details?: { reasoning_tokens?: number } } } | undefined;
     try {
       data = (await requestChat(p.model)) as typeof data;
     } catch (error) {
@@ -347,7 +347,7 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
       }
       if (!recovered) throw lastError;
     }
-    const choice = data.choices?.[0];
+    const choice = data?.choices?.[0];
     text = choice?.message?.content ?? "";
     // Do not throw on an empty GPT-OSS response here: the shared empty-response
     // handler below must get a chance to retry with the smaller Groq model.
