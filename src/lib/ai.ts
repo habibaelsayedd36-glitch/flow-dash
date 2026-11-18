@@ -425,10 +425,10 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
       if (!["http:", "https:"].includes(parsed.protocol)) return;
       if (/google\.|bing\.com|duckduckgo\.com|youtube\.com|youtu\.be|facebook\.com|instagram\.com|tiktok\.com|pinterest\.|googleusercontent\.com|gstatic\.com|microsoft\.com\/bing/i.test(parsed.hostname)) return;
       if (seen.has(parsed.href)) return;
-      const title = decodeResearchHtml(rawTitle.replace(/<[^>]+>/g, " ").replace(/\\s+/g, " ")).trim();
+      const title = decodeResearchHtml(rawTitle.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ")).trim();
       if (!title || title.length < 3) return;
       seen.add(parsed.href);
-      results.push({ url: parsed.href, title, snippet: decodeResearchHtml(rawSnippet.replace(/<[^>]+>/g, " ").replace(/\\s+/g, " ")).trim() });
+      results.push({ url: parsed.href, title, snippet: decodeResearchHtml(rawSnippet.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ")).trim() });
     } catch { /* ignore malformed search results */ }
   };
 
@@ -449,14 +449,14 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
       if (!response.ok) continue;
       searchWasAvailable = true;
       const text = (await response.text()).slice(0, 35_000);
-      const markdownLinks = /\\[([^\\]]{3,240})\\]\\((https?:\\/\\/[^)\\s]+)\\)/g;
+      const markdownLinks = /\[([^\]]{3,240})\]\((https?:\/\/[^)\s]+)\)/g;
       for (const match of text.matchAll(markdownLinks)) {
         addResult(match[2], match[1], "");
       }
       // Reader may return plain URLs instead of Markdown links for some pages.
       if (!results.length) {
-        for (const match of text.matchAll(/https?:\\/\\/[^\\s<>"]+/g)) {
-          addResult(match[0], text.slice(Math.max(0, match.index! - 160), match.index!).split("\\n").filter(Boolean).slice(-1)[0] || "Product source", "");
+        for (const match of text.matchAll(/https?:\/\/[^\s<>"]+/g)) {
+          addResult(match[0], text.slice(Math.max(0, match.index! - 160), match.index!).split("\n").filter(Boolean).slice(-1)[0] || "Product source", "");
         }
       }
       if (results.length >= 5) break;
@@ -480,7 +480,7 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
         searchWasAvailable = true;
         const searchText = await response.text();
         if (/format=rss/i.test(searchUrl)) {
-          const items = searchText.match(/<item\\b[\\s\\S]*?<\\/item>/gi) ?? [];
+          const items = searchText.match(/<item\b[\s\S]*?<\/item>/gi) ?? [];
           for (const item of items) {
             const getTag = (tag: string) => item.match(new RegExp("<" + tag + "[^>]*>([\\\\s\\\\S]*?)<\\\\/" + tag + ">", "i"))?.[1] ?? "";
             const rawUrl = getTag("link").replace(/<!\\[CDATA\\[|\\]\\]>/g, "").trim();
@@ -489,7 +489,7 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
             addResult(rawUrl, title, snippet);
           }
         } else {
-          const blocks = searchText.split(/class=["']result(?:\\s|")/i).slice(1, 9);
+          const blocks = searchText.split(/class=["']result(?:\s|")/i).slice(1, 9);
           for (const block of blocks) {
             const anchor = block.match(/<a[^>]*class=["'][^"']*result__a[^"']*["'][^>]*href=["']([^"']+)["'][^>]*>([\\s\\S]*?)<\\/a>/i);
             if (!anchor) continue;
@@ -527,7 +527,7 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
       const html = (await response.text()).slice(0, 500_000);
       const title = html.match(/<title[^>]*>([\\s\\S]*?)<\\/title>/i)?.[1] || result.title;
       const description = html.match(/<meta[^>]+(?:name|property)=["'](?:description|og:description)["'][^>]+content=["']([^"']*)["']/i)?.[1] || "";
-      const body = html.replace(/<(script|style|svg|noscript)[^>]*>[\\s\\S]*?<\\/\\1>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\\s+/g, " ");
+      const body = html.replace(/<(script|style|svg|noscript)[^>]*>[\\s\\S]*?<\\/\\1>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
       const page = decodeResearchHtml([title, description, body.slice(0, 7000)].join(" ")).slice(0, 6000);
       return { ...result, page };
     } catch { return { ...result, page: "" }; }
