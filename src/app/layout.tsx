@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Cairo, Didact_Gothic, Funnel_Display } from "next/font/google";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { AppNav } from "@/components/AppNav";
 import { auth } from "@/lib/auth/server";
 import { dirOf } from "@/lib/i18n";
@@ -39,7 +39,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         <div className="min-h-dvh lg:flex">
           <AppNav userName={session?.user?.name ?? ""} userEmail={session?.user?.email ?? ""} />
           <main id="main" className="min-w-0 flex-1">
-            <div className="mx-auto w-full max-w-[1240px] px-4 pb-16 pt-6 sm:px-6 lg:px-10 lg:pt-10">{children}</div>
+            <Suspense fallback={<div className="fixed inset-0 z-[200] grid min-h-dvh place-items-center bg-[#f5f6f2] text-[#183c2b]" role="status" aria-live="polite"><div className="flex flex-col items-center gap-5"><img src="https://www.flow-agency-eg.com/assets/logo/flow-lockup-green.png" alt="FLOW" className="h-12 w-auto max-w-[190px] object-contain" /><span className="size-7 animate-spin rounded-full border-[3px] border-[#dce4dc] border-t-[#315e42]" aria-hidden="true" /><p className="text-sm font-medium text-[#68766b]">Checking your access…</p></div></div>}>
+              <div className="mx-auto w-full max-w-[1240px] px-4 pb-16 pt-6 sm:px-6 lg:px-10 lg:pt-10">{children}</div>
+            </Suspense>
           </main>
         </div>
       </body>
