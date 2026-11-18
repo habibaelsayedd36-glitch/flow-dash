@@ -707,7 +707,10 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
   const sourceFacts = readablePages.slice(0, 3).map((item, i) =>
     "[Public product source " + (i + 1) + "] " + item.url + "\n" + item.page
   ).join("\n\n").slice(0, 8500);
-  const features = brief.features.trim() || sourceFacts;
+  // Keep user-entered facts AND verified source excerpts. Previously, one
+  // user-entered feature caused the source excerpts to be discarded, leaving
+  // the model without evidence for the remaining specifications.
+  const features = [brief.features.trim(), sourceFacts].filter(Boolean).join("\n\n");
   const researched: ProductBrief = {
     ...brief,
     brand: brief.brand.trim() || brandHint,
@@ -764,11 +767,11 @@ Also return a "specs" object with your best estimate for: ${missing.join(", ") |
 
 Return exactly this JSON shape:
 {${LISTING_SHAPE},"specs":{${missing.map((k) => `"${k}":""`).join(",")}}}`;
-  // Spreadsheet jobs used to bypass public product research entirely. When a
-  // row contains only a product name, research it through the same verified
-  // source pipeline as single-product generation before asking the model to write.
+  // Research every row with missing specifications, even when the sheet
+  // already contains one or more features. Merge verified source excerpts
+  // with user-entered facts so the model can fill more fields from evidence.
   let researchedBrief = brief;
-  if (!brief.features.trim() && !brief.featuresAr.trim()) {
+  if (missing.length > 0) {
     const research = await researchProductBrief(p, brief);
     researchedBrief = research.brief;
   }
