@@ -417,6 +417,37 @@ function decodeResearchHtml(value: string): string {
     .replace(/&#x([0-9a-f]+);/gi, (_, n: string) => String.fromCodePoint(parseInt(n, 16)));
 }
 
+function normalizeResearchMatchText(value: string): string {
+  return value.toLowerCase().normalize("NFKD").replace(/[\\u0300-\\u036f]/g, "")
+    .replace(/\\bhyadrate\\b/g, "hydra")
+    .replace(/\\b(hydrate|hydration)\\b/g, "hydra")
+    .replace(/[^\\p{L}\\p{N}]+/gu, " ").trim();
+}
+
+function isRelevantResearchPage(
+  item: { title: string; page: string },
+  brief: ProductBrief,
+  brandHint: string,
+): boolean {
+  const stopWords = new Set([
+    "the", "and", "for", "with", "from", "official", "product", "new",
+    "cream", "gel", "serum", "lotion", "moisturizer", "moisturiser",
+    "hydrating", "skin", "face", "ml", "oz",
+  ]);
+  const searchable = new Set(normalizeResearchMatchText(
+    item.title + " " + item.page.slice(0, 2400),
+  ).split(/\\s+/).filter(Boolean));
+  const brandTokens = normalizeResearchMatchText(brandHint).split(/\\s+/)
+    .filter((token) => token.length > 1);
+  const productTokens = normalizeResearchMatchText(brief.name + " " + brief.nameAr)
+    .split(/\\s+/)
+    .filter((token) => token.length > 2 && !stopWords.has(token) && !brandTokens.includes(token));
+  const brandMatches = brandTokens.every((token) => searchable.has(token));
+  const productMatches = productTokens.length === 0 ||
+    productTokens.some((token) => searchable.has(token));
+  return brandMatches && productMatches;
+}
+
 /** Researches an exact product name against public web results before copy is generated. */
 async function researchProductBrief(provider: AiProvider, brief: ProductBrief): Promise<ProductResearch> {
   const brandHint = brief.brand.trim() || (/dermaelle/i.test(brief.name) ? "Dermaelle" : "");
@@ -602,9 +633,14 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
     } catch { /* no readable source available */ }
     return { ...result, page: "" };
   }));
-  const readablePages = pages.filter((item) => item.page.length > 300);
+  const readablePages = pages.filter((item) =>
+    item.page.length > 300 && isRelevantResearchPage(item, brief, brandHint),
+  );
   if (!readablePages.length) {
-    throw new Error("FLOW found the product page but could not read its contents. The source website blocked both page-reading routes; no listing was generated.");
+    const hadReadablePages = pages.some((item) => item.page.length > 300);
+    throw new Error(hadReadablePages
+      ? "FLOW could read public pages, but could not verify that any of them describe this exact product and brand. No unverified details were used."
+      : "FLOW found the product page but could not read its contents. The source website blocked both page-reading routes; no listing was generated.");
   }
   // Do not spend a separate Groq request asking the model to summarize sources.
   // Pass the readable source excerpts into the one listing-generation request;

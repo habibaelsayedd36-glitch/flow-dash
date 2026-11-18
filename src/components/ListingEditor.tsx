@@ -2,8 +2,8 @@
 
 import { ArrowLeft, Check, Copy, Info, Loader2, Plus, RefreshCw, Sparkles, Trash2, X, Zap } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { autoGenerateListingBriefAction, regenerateListingAction, saveListingAction, setListingStatusAction } from "@/app/actions";
+import { useMemo, useState } from "react";
+import { regenerateListingAction, saveListingAction, setListingStatusAction } from "@/app/actions";
 import { MARKETPLACES, MARKETPLACE_META, TONES, isMarketplace, type Marketplace } from "@/lib/catalog";
 import { dictFor, label, tpl, type Locale } from "@/lib/i18n";
 import { RULES, byteLength, checkListing, scoreOf, type ListingContent } from "@/lib/rules";
@@ -86,34 +86,6 @@ export function ListingEditor(props: {
   const [status, setStatus] = useState(meta.status);
   const [origin, setOrigin] = useState({ engine: meta.engine, model: meta.model, edited: meta.edited });
   const [brief, setBrief] = useState({ features: product.features, featuresAr: product.featuresAr, keywords: product.keywords, tone: meta.tone, notes: "", market: marketplace as string });
-  const [autoBriefStatus, setAutoBriefStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
-  const [autoBriefError, setAutoBriefError] = useState("");
-  useEffect(() => {
-    if (product.features.trim() && product.featuresAr.trim() && product.keywords.trim()) return;
-    let active = true;
-    setAutoBriefStatus("loading");
-    autoGenerateListingBriefAction(listingId).then((result) => {
-      if (!active) return;
-      if (!result.ok) {
-        setAutoBriefStatus("error");
-        setAutoBriefError(result.error || "Could not generate product brief.");
-        return;
-      }
-      setBrief((current) => ({
-        ...current,
-        features: current.features.trim() ? current.features : result.features || "",
-        featuresAr: current.featuresAr.trim() ? current.featuresAr : result.featuresAr || "",
-        keywords: current.keywords.trim() ? current.keywords : result.keywords || "",
-      }));
-      setAutoBriefStatus("ready");
-    }).catch(() => {
-      if (active) {
-        setAutoBriefStatus("error");
-        setAutoBriefError("Could not generate product brief.");
-      }
-    });
-    return () => { active = false; };
-  }, [listingId, product.features, product.featuresAr, product.keywords]);
   const [aiError, setAiError] = useState(props.aiError);
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState<"" | "save" | "regen" | "status">("");
@@ -222,7 +194,9 @@ export function ListingEditor(props: {
       nextContent = res.content;
       const targetMarket = isMarketplace(res.marketplace) ? res.marketplace : marketplace;
       remaining = checkListing(nextContent, targetMarket, { brand: product.brand, keywords: brief.keywords }).filter((c) => !c.pass);
-      if (remaining.length === 0) break;
+      // A provider/research failure already produced the fallback draft and
+      // its actionable error. Repeating the same failed request only burns quota.
+      if (remaining.length === 0 || res.aiError || res.engine !== "ai") break;
     }
 
     if (!nextResult) {
@@ -426,9 +400,6 @@ export function ListingEditor(props: {
           <section className="card p-5 sm:p-6" aria-labelledby="f-brief">
             <h2 id="f-brief" className="h-section">{t.editor.brief}</h2>
             <p className="mt-1 text-[13px] leading-relaxed text-mute">{t.editor.briefSub}</p>
-            {autoBriefStatus === "loading" && <p role="status" className="mt-2 text-xs text-mute">AI is preparing key features and target keywords…</p>}
-            {autoBriefStatus === "ready" && <p role="status" className="mt-2 text-xs text-forest">Product brief generated automatically. You can review or edit it before regenerating.</p>}
-            {autoBriefStatus === "error" && <p role="status" className="mt-2 text-xs text-amber-ink">{autoBriefError}</p>}
             <div className="mt-4 flex flex-col gap-4">
               <div className="grid grid-cols-1 gap-3">
                 <div>
