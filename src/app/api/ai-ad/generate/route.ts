@@ -7,6 +7,8 @@ export const maxDuration = 60;
 const MODEL = "@cf/black-forest-labs/flux-2-klein-4b";
 
 export async function POST(request: NextRequest) {
+  const unauthorized = await requireApiUser();
+  if (unauthorized) return unauthorized;
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
   const apiToken = process.env.CLOUDFLARE_API_TOKEN;
 
