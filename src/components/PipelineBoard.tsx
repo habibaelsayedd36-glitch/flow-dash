@@ -4,7 +4,7 @@ import { ArrowLeft, ArrowRight, FileText, Loader2, Plus, X, Zap } from "lucide-r
 import Link from "next/link";
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { createProductAction, moveProductAction, type FormState } from "@/app/actions";
-import { CATEGORIES, MARKETPLACES, MARKETPLACE_META, STAGES, nextStage, prevStage } from "@/lib/catalog";
+import { MARKETPLACES, MARKETPLACE_META, STAGES, nextStage, prevStage } from "@/lib/catalog";
 import { dictFor, tpl, type Locale } from "@/lib/i18n";
 import { MarketBadge, pname } from "./ui";
 
@@ -104,42 +104,15 @@ export function PipelineBoard({ locale, cards, clients, openForm }: { locale: Lo
                   ))}
                 </select>
               </div>
-              <div>
-                <label className="label" htmlFor="p-cat">{t.pipeline.category}</label>
-                <select id="p-cat" name="category" className="field" defaultValue="home">
-                  {CATEGORIES.map((c) => (
-                    <option key={c} value={c}>{t.category[c]}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="label" htmlFor="p-sku">{t.pipeline.sku}</label>
-                <input id="p-sku" name="sku" className="field" dir="ltr" maxLength={40} autoComplete="off" />
-              </div>
               <div className="sm:col-span-2">
                 <label className="label" htmlFor="p-name">{t.pipeline.name}</label>
                 <input id="p-name" name="name" className="field" lang="en" dir="ltr" required maxLength={160} aria-invalid={state.error === "required"} autoComplete="off" />
                 {state.error === "required" && <p className="mt-1.5 text-[13px] text-danger">{t.common.required}</p>}
               </div>
               <div className="sm:col-span-2">
-                <label className="label" htmlFor="p-name-ar">{t.pipeline.nameAr}</label>
-                <input id="p-name-ar" name="nameAr" className="field" lang="ar" dir="rtl" maxLength={160} autoComplete="off" />
-              </div>
-              <div className="sm:col-span-2">
-                <label className="label" htmlFor="p-feat">{t.pipeline.features}</label>
-                <textarea id="p-feat" name="features" className="field" lang="en" dir="ltr" rows={4} maxLength={2000} />
-              </div>
-              <div className="sm:col-span-2">
-                <label className="label" htmlFor="p-feat-ar">{t.pipeline.featuresAr}</label>
-                <textarea id="p-feat-ar" name="featuresAr" className="field" lang="ar" dir="rtl" rows={4} maxLength={2000} />
-              </div>
-              <div className="sm:col-span-2">
                 <label className="label" htmlFor="p-brand">{t.pipeline.brand}</label>
-                <input id="p-brand" name="brand" className="field" dir="ltr" maxLength={80} autoComplete="off" />
-              </div>
-              <div className="sm:col-span-2">
-                <label className="label" htmlFor="p-kw">{t.pipeline.keywords}</label>
-                <input id="p-kw" name="keywords" className="field" maxLength={500} autoComplete="off" />
+                <input id="p-brand" name="brand" className="field" dir="ltr" required maxLength={80} autoComplete="off" />
+                <p className="mt-1.5 text-xs text-muted-foreground">Enter only the brand and English product name. FLOW researches the product and prepares the rest automatically.</p>
               </div>
               <div className="flex items-center gap-3 sm:col-span-2 lg:col-span-4">
                 <button type="submit" className="btn btn-primary" disabled={saving}>
