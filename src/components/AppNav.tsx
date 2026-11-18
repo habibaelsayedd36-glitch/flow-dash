@@ -25,6 +25,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Brand } from "./Brand";
+import { SignOutButton } from "./SignOutButton";
 
 type Item = { href: string; label: string; icon: LucideIcon; also?: string[] };
 
@@ -77,7 +78,7 @@ const GROUPS: { label: string | null; items: Item[] }[] = [
   },
 ];
 
-export function AppNav() {
+export function AppNav({ userName, userEmail }: { userName: string; userEmail: string }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
@@ -136,7 +137,17 @@ export function AppNav() {
     </nav>
   );
 
-  const footer = <p className="mt-auto border-t border-border px-2 pt-4 text-xs leading-relaxed text-muted-foreground">Sample data. Swap in your own clients and products.</p>;
+  const footer = (
+    <div className="mt-auto border-t border-border px-2 pt-4">
+      <div className="mb-3 min-w-0 rounded-2xl bg-flow-green px-3 py-3 text-white">
+        <p className="truncate text-sm font-semibold text-white">{userName || "FLOW team"}</p>
+        {userEmail && <p className="mt-0.5 truncate text-xs text-white/80">{userEmail}</p>}
+        <div className="mt-3 [&_button]:border-white/30 [&_button]:text-white [&_button]:hover:bg-white/10">
+          <SignOutButton />
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <>

@@ -1,3 +1,4 @@
+import { requireApiUser } from "@/lib/auth/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { ensureDb } from "@/db/ensure";
@@ -12,6 +13,8 @@ export const dynamic = "force-dynamic";
  *   &estimates=1                 → include values that are still unverified estimates
  */
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const unauthorized = await requireApiUser();
+  if (unauthorized) return unauthorized;
   await ensureDb();
   const { id } = await ctx.params;
   const url = new URL(req.url);

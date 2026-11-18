@@ -1,3 +1,4 @@
+import { requireApiUser } from "@/lib/auth/server";
 import { ensureDb } from "@/db/ensure";
 import { runScheduledChecks } from "@/lib/engine";
 
@@ -12,8 +13,13 @@ export const dynamic = "force-dynamic";
  */
 async function handle(req: Request) {
   const secret = process.env.CRON_SECRET;
-  if (secret && req.headers.get("authorization") !== `Bearer ${secret}`) {
-    return Response.json({ ok: false, error: "unauthorized" }, { status: 401 });
+  if (secret) {
+    if (req.headers.get("authorization") !== `Bearer ${secret}`) {
+      return Response.json({ ok: false, error: "unauthorized" }, { status: 401 });
+    }
+  } else {
+    const unauthorized = await requireApiUser();
+    if (unauthorized) return unauthorized;
   }
   try {
     await ensureDb();

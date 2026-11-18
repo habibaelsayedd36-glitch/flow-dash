@@ -1,5 +1,7 @@
 "use server";
 
+
+import { requireUser } from "@/lib/auth/server";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
@@ -48,6 +50,7 @@ export async function setLocaleAction(locale: "ar" | "en") {
 // ------------------------------------------------------------------ clients
 
 export async function createClientAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  await requireUser();
   await ensureDb();
   const name = str(fd, "name", 80);
   if (!name) return { error: "required" };
@@ -77,6 +80,7 @@ export async function createClientAction(_prev: FormState, fd: FormData): Promis
 // ----------------------------------------------------------------- products
 
 export async function createProductAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  await requireUser();
   await ensureDb();
   const name = str(fd, "name", 160);
   const clientId = int(fd.get("clientId"), 1, 2_000_000_000, 0);
@@ -112,6 +116,7 @@ export async function createProductAction(_prev: FormState, fd: FormData): Promi
 }
 
 export async function moveProductAction(productId: number, stage: string): Promise<{ ok: boolean; ran: number }> {
+  await requireUser();
   await ensureDb();
   if (!Number.isInteger(productId) || !isStage(stage)) return { ok: false, ran: 0 };
   const results = await moveProductStage(productId, stage);
@@ -123,7 +128,8 @@ export async function moveProductAction(productId: number, stage: string): Promi
 
 export async function generateListingAction(_prev: FormState, fd: FormData): Promise<FormState> {
   try {
-    await ensureDb();
+    await requireUser();
+  await ensureDb();
     const productId = int(fd.get("productId"), 1, 2_000_000_000, 0);
     const [product] = productId ? await db.select().from(products).where(eq(products.id, productId)) : [];
     if (!product) return { error: "No product was selected or the product no longer exists." };
@@ -147,6 +153,7 @@ export async function generateListingAction(_prev: FormState, fd: FormData): Pro
 }
 
 export async function saveBrandVoiceAction(value: string): Promise<{ ok: boolean }> {
+  await requireUser();
   await ensureDb();
   const cleanValue = String(value ?? "").trim().slice(0, 2000);
   if (!cleanValue) return { ok: false };
@@ -158,6 +165,7 @@ export async function saveBrandVoiceAction(value: string): Promise<{ ok: boolean
 export type BulkGenerateResult = { ok: boolean; results: Array<{ productId: number; productName: string; listingId?: number; engine?: string; aiError?: string; error?: string }> };
 
 export async function bulkGenerateListingsAction(productIds: number[], marketplace: string): Promise<BulkGenerateResult> {
+  await requireUser();
   await ensureDb();
   if (!isMarketplace(marketplace) || !Array.isArray(productIds)) return { ok: false, results: [] };
   const ids = [...new Set(productIds.map((id) => int(id, 1, 2_000_000_000, 0)).filter(Boolean))].slice(0, 25);
@@ -181,6 +189,7 @@ export type AutoBriefResult = { ok: boolean; features?: string; featuresAr?: str
 
 /** Fill missing product brief fields from confirmed product/listing facts using the connected AI provider. */
 export async function autoGenerateListingBriefAction(listingId: number): Promise<AutoBriefResult> {
+  await requireUser();
   await ensureDb();
   const [row] = await db.select({ product: products, listing: listings }).from(listings)
     .innerJoin(products, eq(listings.productId, products.id)).where(eq(listings.id, listingId));
@@ -224,6 +233,7 @@ export type RegenerateResult =
   | { ok: true; content: ListingContent; marketplace: string; engine: string; model: string | null; aiError: string | null; ran: number };
 
 export async function regenerateListingAction(listingId: number, input: RegenerateInput): Promise<RegenerateResult> {
+  await requireUser();
   await ensureDb();
   const [listing] = await db.select().from(listings).where(eq(listings.id, listingId));
   if (!listing) return { ok: false };
@@ -272,6 +282,7 @@ const clean = (v: unknown, max: number) => (typeof v === "string" ? v.trim().sli
 const cleanList = (v: unknown) => (Array.isArray(v) ? v.slice(0, 8).map((b) => clean(b, 600)).filter(Boolean) : []);
 
 export async function saveListingAction(listingId: number, input: ListingContent): Promise<{ ok: boolean }> {
+  await requireUser();
   await ensureDb();
   const [row] = await db
     .select({ listing: listings, product: products })
@@ -297,6 +308,7 @@ export async function saveListingAction(listingId: number, input: ListingContent
 }
 
 export async function setListingStatusAction(listingId: number, status: string): Promise<{ ok: boolean; ran: number }> {
+  await requireUser();
   await ensureDb();
   if (!(LISTING_STATUSES as readonly string[]).includes(status)) return { ok: false, ran: 0 };
   const [row] = await db
@@ -317,6 +329,7 @@ export async function setListingStatusAction(listingId: number, status: string):
 // -------------------------------------------------------------- automations
 
 export async function createAutomationAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  await requireUser();
   await ensureDb();
   const name = str(fd, "name", 100);
   if (!name) return { error: "required" };
@@ -352,18 +365,21 @@ export async function createAutomationAction(_prev: FormState, fd: FormData): Pr
 }
 
 export async function toggleAutomationAction(id: number, enabled: boolean) {
+  await requireUser();
   await ensureDb();
   await db.update(automations).set({ enabled: Boolean(enabled) }).where(eq(automations.id, id));
   refresh();
 }
 
 export async function deleteAutomationAction(id: number) {
+  await requireUser();
   await ensureDb();
   await db.delete(automations).where(eq(automations.id, id));
   refresh();
 }
 
 export async function runChecksAction(): Promise<{ fired: number }> {
+  await requireUser();
   await ensureDb();
   const results = await runScheduledChecks();
   refresh();
@@ -373,6 +389,7 @@ export async function runChecksAction(): Promise<{ fired: number }> {
 // -------------------------------------------------------------------- tasks
 
 export async function createTaskAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  await requireUser();
   await ensureDb();
   const title = str(fd, "title", 160);
   if (!title) return { error: "required" };
@@ -391,6 +408,7 @@ export async function createTaskAction(_prev: FormState, fd: FormData): Promise<
 }
 
 export async function toggleTaskAction(id: number, done: boolean) {
+  await requireUser();
   await ensureDb();
   await db.update(tasks).set({ done: Boolean(done), doneAt: done ? new Date() : null }).where(eq(tasks.id, id));
   refresh();

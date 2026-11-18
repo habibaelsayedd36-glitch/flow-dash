@@ -1,3 +1,4 @@
+import { requireApiUser } from "@/lib/auth/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { ensureDb } from "@/db/ensure";
@@ -15,6 +16,8 @@ const fail = (error: string, status = 400) => Response.json({ ok: false, error }
  * kind=template → attaches the header rows of the seller's own Amazon flat-file template to a job.
  */
 export async function POST(req: Request) {
+  const unauthorized = await requireApiUser();
+  if (unauthorized) return unauthorized;
   await ensureDb();
   let form: FormData;
   try {

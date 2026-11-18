@@ -1,3 +1,4 @@
+import { requireApiUser } from "@/lib/auth/server";
 import { and, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
@@ -111,6 +112,8 @@ function orderStatus(v: string): string {
 }
 
 export async function POST(req: Request) {
+  const unauthorized = await requireApiUser();
+  if (unauthorized) return unauthorized;
   await ensureDb();
   let form: FormData;
   try {
