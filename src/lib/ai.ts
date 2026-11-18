@@ -375,12 +375,29 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
       data = (await requestGemini(primaryModel)) as typeof data;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      // Recover from retired Gemini model IDs and temporary overloads using
-      // the currently recommended Flash model. This also repairs old saved settings.
+      // Recover old saved model IDs with the current default. If that model is
+      // overloaded, fail over to independent, supported Flash-Lite/Flash models.
       const retiredModel = message.includes("(404):") && /no longer available|not found|update your code/i.test(message);
       const overloaded = message.includes("(503):");
-      if ((!retiredModel && !overloaded) || primaryModel === "gemini-3.8-flash") throw error;
-      data = (await requestGemini("gemini-3.8-flash")) as typeof data;
+      if (!retiredModel && !overloaded) throw error;
+
+      const fallbacks = retiredModel
+        ? ["gemini-3.8-flash", "gemini-3.5-flash-lite"]
+        : primaryModel === "gemini-3.8-flash"
+          ? ["gemini-3.5-flash-lite", "gemini-3.6-flash"]
+          : ["gemini-3.8-flash", "gemini-3.5-flash-lite"];
+      let lastError: unknown = error;
+      let recovered = false;
+      for (const fallbackModel of [...new Set(fallbacks)].filter((model) => model !== primaryModel)) {
+        try {
+          data = (await requestGemini(fallbackModel)) as typeof data;
+          recovered = true;
+          break;
+        } catch (fallbackError) {
+          lastError = fallbackError;
+        }
+      }
+      if (!recovered) throw lastError;
     }
     text = (data.candidates?.[0]?.content?.parts ?? []).map((x) => x.text ?? "").join("");
   }
