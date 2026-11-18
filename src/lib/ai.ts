@@ -534,47 +534,67 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
 
   // Read source pages as clean Markdown through Reader. This avoids fragile
   // per-site HTML parsing and keeps product facts grounded in the page content.
+  const htmlToResearchText = (html: string) => decodeResearchHtml(
+    html
+      .replace(/<(script|style|noscript|svg|header|footer|nav)\\b[\\s\\S]*?<\\/\\1>/gi, " ")
+      .replace(/<\\/(p|div|li|h[1-6]|section|br|tr)>/gi, "\\n")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/[ \\t]+/g, " ")
+      .replace(/\\n[ \\t]+/g, "\\n")
+      .replace(/\\n{3,}/g, "\\n\\n")
+      .trim()
+  );
   const pages = await Promise.all(results.slice(0, 3).map(async (result) => {
+    // Try the clean Reader representation first.
     try {
       const response = await fetch("https://r.jina.ai/" + result.url, {
         headers: { accept: "text/plain, text/markdown, */*" },
-        signal: AbortSignal.timeout(20_000),
+        signal: AbortSignal.timeout(18_000),
+        cache: "no-store",
+      });
+      if (response.ok) {
+        const page = (await response.text()).slice(0, 9000);
+        if (page.length > 300) return { ...result, page };
+      }
+    } catch { /* fall through to the original page */ }
+    // Many Shopify storefronts block Reader or return an empty conversion.
+    // Fetch the product page itself and extract its visible HTML text instead.
+    try {
+      const response = await fetch(result.url, {
+        headers: {
+          "user-agent": "Mozilla/5.0 (compatible; FLOWProductResearch/1.0)",
+          accept: "text/html,application/xhtml+xml",
+        },
+        signal: AbortSignal.timeout(18_000),
         cache: "no-store",
       });
       if (!response.ok) return { ...result, page: "" };
-      const page = (await response.text()).slice(0, 6500);
-      return { ...result, page };
+      const html = await response.text();
+      const page = htmlToResearchText(html).slice(0, 9000);
+      return { ...result, page: page.length > 300 ? page : "" };
     } catch {
       return { ...result, page: "" };
     }
   }));
-  const sourceText = pages.map((item, i) =>
-    "[Source " + (i + 1) + "] " + item.url + "\nSearch title: " + item.title + "\nSearch snippet: " + item.snippet + "\nPage text: " + (item.page || "(page could not be opened)")
-  ).join("\n\n").slice(0, 22_000);
-  const raw = await generateText(
-    provider,
-    "You are a strict product-fact researcher for e-commerce. Use only explicit facts present in the supplied public source excerpts. Prefer the manufacturer's official product page; use reputable retailers only when the exact product/model matches. Ignore unrelated products, sponsored claims that do not match the exact product, user reviews, and assumptions. Never infer ingredients, materials, sizes, certifications, medical benefits, compatibility, warranty, origin, or performance. Return JSON only.",
-    "Research this exact product and extract facts that are explicitly supported by the sources.\nProduct name: " + brief.name +
-    "\nBrand supplied: " + (brief.brand || "(unknown)") + "\nCategory supplied: " + (brief.category || "(unknown)") +
-    "\n\nSources:\n" + sourceText +
-    '\n\nReturn exactly this JSON:\n{"brand":"","category":"","featuresEn":[""],"featuresAr":[""],"keywords":[""]}\n' +
-    "Provide 3-8 concise facts only when directly supported by the sources. English and Arabic feature lists must describe the same facts in the same order. If no reliable matching facts exist, return empty feature arrays. Keywords may use the exact product name, confirmed brand, category and source wording only. Do not write sales copy or make claims beyond the source text."
-  );
-  const parsed = parseJson(raw);
-  const asLines = (value: unknown) => Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean).slice(0, 8).join("\n")
-    : "";
-  const features = brief.features.trim() || asLines(parsed.featuresEn);
-  const featuresAr = brief.featuresAr.trim() || asLines(parsed.featuresAr);
-  if (!features && !featuresAr) throw new Error("FLOW found no reliable product facts in the available sources, so it stopped rather than inventing features.");
-  const keywords = brief.keywords.trim() || (Array.isArray(parsed.keywords)
-    ? parsed.keywords.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean).slice(0, 15).join(", ")
-    : "");
+  const readablePages = pages.filter((item) => item.page.length > 300);
+  if (!readablePages.length) {
+    throw new Error("FLOW found the product page but could not read its contents. The source website blocked both page-reading routes; no listing was generated.");
+  }
+  // Do not spend a separate Groq request asking the model to summarize sources.
+  // Pass the readable source excerpts into the one listing-generation request;
+  // the listing model can write both languages directly from those excerpts.
+  const sourceFacts = readablePages.map((item, i) =>
+    "[Verified public source " + (i + 1) + "] " + item.url + "\\n" + item.page
+  ).join("\\n\\n").slice(0, 8500);
+  const features = brief.features.trim() || sourceFacts;
   const researched: ProductBrief = {
-    ...brief, brand: brief.brand.trim() || str(parsed.brand), category: brief.category.trim() || str(parsed.category),
-    features, featuresAr, keywords,
+    ...brief,
+    brand: brief.brand.trim() || brandHint,
+    features,
+    featuresAr: brief.featuresAr.trim(),
+    keywords: brief.keywords.trim() || brief.name,
   };
-  return { brief: researched, sources: pages.filter((item) => item.page || item.snippet).map((item) => item.url).slice(0, 5) };
+  return { brief: researched, sources: readablePages.map((item) => item.url).slice(0, 5) };
 }
 
 export async function generateWithAi(p: AiProvider, brief: ProductBrief, m: Marketplace, tone: string, notes: string): Promise<ListingContent> {
