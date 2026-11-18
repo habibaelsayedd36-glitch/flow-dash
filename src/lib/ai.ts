@@ -579,7 +579,7 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
   // so add it explicitly and prioritize it for RVRS rows. The catalogue confirms
   // product identity and the wording/pack size only; it does not substantiate
   // ingredients, cleaning performance, materials, or other product claims.
-  if (/\\brvrs\\b/i.test(brandHint + " " + brief.name)) {
+  if (/\brvrs\b/i.test(brandHint + " " + brief.name)) {
     addResult(
       "https://frppr.com/brands/rvrs",
       "FRPPR RVRS brand catalogue",
