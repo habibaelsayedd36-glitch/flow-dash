@@ -418,10 +418,10 @@ function decodeResearchHtml(value: string): string {
 }
 
 function normalizeResearchMatchText(value: string): string {
-  return value.toLowerCase().normalize("NFKD").replace(/[\\u0300-\\u036f]/g, "")
-    .replace(/\\bhyadrate\\b/g, "hydra")
-    .replace(/\\b(hydrate|hydration)\\b/g, "hydra")
-    .replace(/[^\\p{L}\\p{N}]+/gu, " ").trim();
+  return value.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/\bhyadrate\b/g, "hydra")
+    .replace(/\b(hydrate|hydration)\b/g, "hydra")
+    .replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 }
 
 function isRelevantResearchPage(
@@ -436,11 +436,11 @@ function isRelevantResearchPage(
   ]);
   const searchable = new Set(normalizeResearchMatchText(
     item.title + " " + item.page.slice(0, 2400),
-  ).split(/\\s+/).filter(Boolean));
-  const brandTokens = normalizeResearchMatchText(brandHint).split(/\\s+/)
+  ).split(/\s+/).filter(Boolean));
+  const brandTokens = normalizeResearchMatchText(brandHint).split(/\s+/)
     .filter((token) => token.length > 1);
   const productTokens = normalizeResearchMatchText(brief.name + " " + brief.nameAr)
-    .split(/\\s+/)
+    .split(/\s+/)
     .filter((token) => token.length > 2 && !stopWords.has(token) && !brandTokens.includes(token));
   const brandMatches = brandTokens.every((token) => searchable.has(token));
   const productMatches = productTokens.length === 0 ||
