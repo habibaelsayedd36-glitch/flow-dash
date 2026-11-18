@@ -80,7 +80,7 @@ export async function createProductAction(_prev: FormState, fd: FormData): Promi
   await ensureDb();
   const name = str(fd, "name", 160);
   const clientId = int(fd.get("clientId"), 1, 2_000_000_000, 0);
-  if (!name || !clientId) return { error: "required" };
+  if (!name || !str(fd, "brand", 80) || !clientId) return { error: "required" };
   const [client] = await db.select().from(clients).where(eq(clients.id, clientId));
   if (!client) return { error: "failed" };
   const marketplace = str(fd, "marketplace");
@@ -90,14 +90,14 @@ export async function createProductAction(_prev: FormState, fd: FormData): Promi
       .values({
         clientId,
         name,
-        nameAr: str(fd, "nameAr", 160),
-        brand: str(fd, "brand", 80) || client.name,
-        sku: str(fd, "sku", 40),
-        category: oneOf(CATEGORIES, str(fd, "category"), "home"),
+        nameAr: "",
+        brand: str(fd, "brand", 80),
+        sku: "",
+        category: "auto",
         marketplace: isMarketplace(marketplace) ? marketplace : "amazon",
-        features: str(fd, "features", 2000),
-        featuresAr: str(fd, "featuresAr", 2000),
-        keywords: str(fd, "keywords", 500),
+        features: "",
+        featuresAr: "",
+        keywords: "",
       })
       .returning({ id: products.id });
     const results = [
