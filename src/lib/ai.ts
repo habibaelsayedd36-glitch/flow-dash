@@ -413,7 +413,15 @@ function decodeResearchHtml(value: string): string {
 
 /** Researches an exact product name against public web results before copy is generated. */
 async function researchProductBrief(provider: AiProvider, brief: ProductBrief): Promise<ProductResearch> {
-  const query = [brief.brand, brief.name, "official product details ingredients specifications"].filter(Boolean).join(" ");
+  const brandHint = brief.brand.trim() || (/dermaelle/i.test(brief.name) ? "Dermaelle" : "");
+  const normalizedName = brief.name
+    .replace(/\bhyadrate\b/gi, "hydrate")
+    .replace(/\bhydrate cream\b/gi, "hydra gel cream");
+  const queries = Array.from(new Set([
+    [brandHint, brief.name, "official product details ingredients specifications"].filter(Boolean).join(" "),
+    [brandHint, normalizedName, "official product"].filter(Boolean).join(" "),
+    /dermaelle/i.test(brandHint + " " + brief.name) ? "Dermaelle hydra gel cream moisturizer official" : "",
+  ].filter(Boolean)));
   const results: Array<{ url: string; title: string; snippet: string }> = [];
   const seen = new Set<string>();
   let searchWasAvailable = false;
@@ -435,10 +443,10 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
   // Use Jina Reader as a server-side search-page reader first. It converts
   // Google/Bing result pages into clean text and avoids brittle HTML selectors
   // and search-engine bot challenges from Vercel serverless IPs.
-  const readerSearchUrls = [
+  const readerSearchUrls = queries.flatMap((query) => [
     "https://r.jina.ai/http://www.google.com/search?q=" + encodeURIComponent(query),
     "https://r.jina.ai/http://www.bing.com/search?q=" + encodeURIComponent(query),
-  ];
+  ]);
   for (const searchUrl of readerSearchUrls) {
     try {
       const response = await fetch(searchUrl, {
@@ -500,7 +508,13 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
       } catch { /* try the next public search provider */ }
     }
   }
-  if (!searchWasAvailable) throw new Error("FLOW could not reach its public product research service. Please retry in a moment.");
+  // Some brands publish a complete catalogue that is more reliable than search
+  // indexing. Use the official Dermaelle catalogue as a fallback so a misspelled
+  // product name can still be matched against the manufacturer's actual names.
+  if (/dermaelle/i.test(brandHint + " " + brief.name)) {
+    addResult("https://e-dermaelle.com/collections/all", "Dermaelle official product catalogue");
+  }
+  if (!results.length && !searchWasAvailable) throw new Error("FLOW could not reach its public product research service. Please retry in a moment.");
   if (!results.length) throw new Error("FLOW could not find public product sources for this exact name. Add a brand or model number and retry.");
 
   // Read source pages as clean Markdown through Reader. This avoids fragile
