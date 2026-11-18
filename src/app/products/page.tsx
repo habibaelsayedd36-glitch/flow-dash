@@ -122,7 +122,7 @@ export default async function ProductsPage({
                 {rows.map((row) => (
                   <tr key={row.id} className="transition-colors hover:bg-muted/60">
                     <td className="px-5 py-4">
-                      <Link href={`/studio?product=${row.id}`} className="font-medium text-foreground hover:text-flow-green">{locale === "ar" && row.nameAr ? row.nameAr : row.name}</Link>
+                      <Link href="/pipeline" className="font-medium text-foreground hover:text-flow-green">{locale === "ar" && row.nameAr ? row.nameAr : row.name}</Link>
                       <span className="mt-1 block text-xs text-muted-foreground" dir="ltr">{row.sku || "No SKU"}</span>
                     </td>
                     <td className="px-5 py-4">{row.brand || "—"}</td>
