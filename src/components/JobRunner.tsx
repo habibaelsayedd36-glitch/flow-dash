@@ -3,7 +3,7 @@
 import { Check, Download, FileSpreadsheet, Loader2, PackagePlus, TriangleAlert } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { finishJobAction, importJobAction, processJobItemAction, retryFailedJobItemsAction, verifyJobItemAction } from "@/app/actions-tools";
+import { finishJobAction, importJobAction, processJobItemAction, pauseJobAction, retryFailedJobItemsAction, verifyJobItemAction } from "@/app/actions-tools";
 import { ScoreBadge } from "./ui";
 
 type Item = {
