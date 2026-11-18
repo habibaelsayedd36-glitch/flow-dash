@@ -114,6 +114,30 @@ export async function createKeywordsAction(_prev: GrowthState, fd: FormData): Pr
   return { ok: true };
 }
 
+/** Save competitor-derived keyword candidates to a selected product's tracker. No search-volume or rank data is fabricated. */
+export async function saveResearchKeywordsAction(
+  productId: number,
+  marketplaceValue: string,
+  rawKeywords: string[],
+): Promise<{ ok: boolean; added: number; error?: string }> {
+  await ensureDb();
+  const [product] = await db.select().from(products).where(eq(products.id, whole(productId, 0, 2_000_000_000, 0)));
+  if (!product) return { ok: false, added: 0, error: "Choose a valid product first." };
+  const marketplace = market(String(marketplaceValue ?? product.marketplace));
+  const freshInput = [...new Set((Array.isArray(rawKeywords) ? rawKeywords : [])
+    .map((k) => String(k ?? "").trim().slice(0, 120))
+    .filter(Boolean))].slice(0, 30);
+  if (!freshInput.length) return { ok: false, added: 0, error: "There are no keyword candidates to save." };
+  const existing = await db.select({ keyword: keywords.keyword }).from(keywords)
+    .where(and(eq(keywords.productId, product.id), eq(keywords.marketplace, marketplace)));
+  const have = new Set(existing.map((e) => e.keyword.toLowerCase()));
+  const fresh = freshInput.filter((k) => !have.has(k.toLowerCase()));
+  if (!fresh.length) return { ok: false, added: 0, error: "These keywords are already tracked for this product." };
+  await db.insert(keywords).values(fresh.map((keyword) => ({ clientId: product.clientId, productId: product.id, marketplace, keyword })));
+  refresh();
+  return { ok: true, added: fresh.length };
+}
+
 export async function logRankAction(id: number, values: Record<string, number>): Promise<Result> {
   await ensureDb();
   const rank = whole(values.rank, 0, 1000, 0);
