@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Cairo, Didact_Gothic, Funnel_Display } from "next/font/google";
 import type { ReactNode } from "react";
 import { AppNav } from "@/components/AppNav";
+import { auth } from "@/lib/auth/server";
 import { dirOf } from "@/lib/i18n";
 import { getI18n } from "@/lib/locale";
 import "./globals.css";
@@ -25,7 +26,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = { themeColor: "#143c28", width: "device-width", initialScale: 1 };
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
-  const { locale, t } = await getI18n();
+  const [{ locale, t }, { data: session }] = await Promise.all([getI18n(), auth.getSession()]);
   return (
     <html lang={locale} dir={dirOf(locale)} className={`${funnel.variable} ${didact.variable} ${cairo.variable}`}>
       <body className="min-h-dvh bg-background text-foreground antialiased">
@@ -36,7 +37,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           {t.nav.overview}
         </a>
         <div className="min-h-dvh lg:flex">
-          <AppNav />
+          <AppNav userName={session?.user?.name ?? ""} userEmail={session?.user?.email ?? ""} />
           <main id="main" className="min-w-0 flex-1">
             <div className="mx-auto w-full max-w-[1240px] px-4 pb-16 pt-6 sm:px-6 lg:px-10 lg:pt-10">{children}</div>
           </main>
