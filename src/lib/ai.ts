@@ -530,13 +530,13 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
           addResult(match[0], text.slice(Math.max(0, match.index! - 160), match.index!).split("\n").filter(Boolean).slice(-1)[0] || "Product source", "");
         }
       }
-      if (results.length >= 5) break;
+      if (results.length >= 8) break;
     } catch { /* try the next search route */ }
   }
 
   // Keep direct RSS/HTML providers as secondary fallbacks, but never depend
   // on their markup being identical across search-engine experiments.
-  if (results.length < 3) {
+  if (results.length < 8) {
     for (const query of queries) {
       const searchUrls = [
         "https://www.bing.com/search?format=rss&q=" + encodeURIComponent(query),
@@ -568,10 +568,10 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
               addResult(anchor[1], anchor[2], "");
             }
           }
-          if (results.length >= 5) break;
+          if (results.length >= 8) break;
         } catch { /* try the next public search provider */ }
       }
-      if (results.length >= 5) break;
+      if (results.length >= 8) break;
     }
   }
   // Prefer the manufacturer's focused Hyalubalance collection for Dermaelle
@@ -607,7 +607,7 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
       .replace(/\n{3,}/g, "\n\n")
       .trim()
   );
-  const pages = await Promise.all(results.slice(0, 3).map(async (result) => {
+  const pages = await Promise.all(results.slice(0, 8).map(async (result) => {
     // Try the clean Reader representation first.
     try {
       const response = await fetch("https://r.jina.ai/" + result.url, {
@@ -671,7 +671,7 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
   // Do not spend a separate Groq request asking the model to summarize sources.
   // Pass the readable source excerpts into the one listing-generation request;
   // the listing model can write both languages directly from those excerpts.
-  const sourceFacts = readablePages.map((item, i) =>
+  const sourceFacts = readablePages.slice(0, 3).map((item, i) =>
     "[Verified public source " + (i + 1) + "] " + item.url + "\n" + item.page
   ).join("\n\n").slice(0, 8500);
   const features = brief.features.trim() || sourceFacts;
@@ -682,7 +682,7 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
     featuresAr: brief.featuresAr.trim(),
     keywords: brief.keywords.trim() || brief.name,
   };
-  return { brief: researched, sources: readablePages.map((item) => item.url).slice(0, 5) };
+  return { brief: researched, sources: readablePages.slice(0, 3).map((item) => item.url) };
 }
 
 export async function generateWithAi(p: AiProvider, brief: ProductBrief, m: Marketplace, tone: string, notes: string): Promise<ListingContent> {
