@@ -226,7 +226,7 @@ ALTER TABLE "tasks" ADD CONSTRAINT "tasks_product_id_products_id_fk" FOREIGN KEY
 `;
 
 export const UPGRADE = `
-ALTER TABLE "clients" ADD COLUMN IF NOT EXISTS "share_token" text;
+ALTER TABLE "clients" ADD COLUMN IF NOT EXISTS "share_token" text;\n\nALTER TABLE "statements" ADD COLUMN IF NOT EXISTS "paid_at" timestamp with time zone;
 
 ALTER TABLE "products" ADD COLUMN IF NOT EXISTS "stock" integer;
 
