@@ -353,7 +353,7 @@ export async function createStatementAction(_prev: StatementState, fd: FormData)
 export async function toggleStatementPaidAction(id: number, paid: boolean) {
   await requireUser();
   await ensureDb();
-  await db.update(statements).set({ paid: Boolean(paid) }).where(eq(statements.id, id));
+  await db.update(statements).set({ paid: Boolean(paid), paidAt: paid ? new Date() : null }).where(eq(statements.id, id));
   refresh();
 }
 
