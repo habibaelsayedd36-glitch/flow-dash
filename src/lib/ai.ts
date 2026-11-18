@@ -17,7 +17,7 @@ export type AiProvider = { id: ProviderId; label: string; model: string; key: st
 export const PROVIDERS: Record<ProviderId, { label: string; defaultModel: string }> = {
   anthropic: { label: "Anthropic Claude", defaultModel: "claude-sonnet-5-5" },
   openai: { label: "OpenAI", defaultModel: "gpt-5-mini" },
-  gemini: { label: "Google Gemini", defaultModel: "gemini-2.5-flash" },
+  gemini: { label: "Google Gemini", defaultModel: "gemini-3.8-flash" },
   groq: { label: "Groq (Free)", defaultModel: "openai/gpt-oss-120b" },
 };
 export const isProviderId = (v: unknown): v is ProviderId => typeof v === "string" && v in PROVIDERS;
@@ -359,7 +359,7 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
   } else {
     // Gemini expects a model ID, not a provider label or a "models/" resource path.
     const configuredModel = p.model.replace(/^models\//, "").trim();
-    const primaryModel = /^gemini-[a-z0-9.-]+$/i.test(configuredModel) ? configuredModel : "gemini-2.5-flash";
+    const primaryModel = /^gemini-[a-z0-9.-]+$/i.test(configuredModel) ? configuredModel : "gemini-3.8-flash";
     const requestGemini = (model: string) => post(
       `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
       { "x-goog-api-key": p.key },
@@ -375,9 +375,12 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
       data = (await requestGemini(primaryModel)) as typeof data;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      // If Google's selected model is overloaded, switch once to a stable Flash fallback.
-      if (!message.includes("(503):") || primaryModel === "gemini-2.5-flash") throw error;
-      data = (await requestGemini("gemini-2.5-flash")) as typeof data;
+      // Recover from retired Gemini model IDs and temporary overloads using
+      // the currently recommended Flash model. This also repairs old saved settings.
+      const retiredModel = message.includes("(404):") && /no longer available|not found|update your code/i.test(message);
+      const overloaded = message.includes("(503):");
+      if ((!retiredModel && !overloaded) || primaryModel === "gemini-3.8-flash") throw error;
+      data = (await requestGemini("gemini-3.8-flash")) as typeof data;
     }
     text = (data.candidates?.[0]?.content?.parts ?? []).map((x) => x.text ?? "").join("");
   }
