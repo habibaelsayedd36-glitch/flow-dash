@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, Loader2, Search, Sparkles, WandSparkles } from "lucide-react";
 import { bulkGenerateListingsAction, saveBrandVoiceAction } from "@/app/actions";
-import { askCommerceAssistantAction } from "@/app/actions-growth";
+import { askCommerceAssistantAction, saveResearchKeywordsAction } from "@/app/actions-growth";
 import { MARKETPLACES, MARKETPLACE_META } from "@/lib/catalog";
 
 type Listing = { id: number; productName: string; clientName: string; marketplace: string; status: string; score: number; engine: string };
@@ -32,6 +32,9 @@ export function IntelligenceStudio({ listings, products, initialBrandVoice }: { 
   const [assistantAnswer, setAssistantAnswer] = useState("");
   const [assistantError, setAssistantError] = useState("");
   const [assistantPending, setAssistantPending] = useState(false);
+  const [researchProductId, setResearchProductId] = useState<number>(products[0]?.id ?? 0);
+  const [savingKeywords, setSavingKeywords] = useState(false);
+  const [keywordSaveMessage, setKeywordSaveMessage] = useState("");
   const [selectedProducts, setSelectedProducts] = useState<number[]>([]);
   const [bulkMarketplace, setBulkMarketplace] = useState("amazon");
   const [bulkResults, setBulkResults] = useState<Array<{ productId: number; productName: string; listingId?: number; engine?: string; aiError?: string; error?: string }> | null>(null);
@@ -47,13 +50,43 @@ export function IntelligenceStudio({ listings, products, initialBrandVoice }: { 
   }
 
   const comparison = useMemo(() => {
-    const words = (s: string) => Array.from(new Set((s.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).filter((w) => w.length > 3)));
-    const theirs = words(competitor);
-    const ours = new Set(words(ownCopy));
-    const shared = theirs.filter((w) => ours.has(w));
-    const missing = theirs.filter((w) => !ours.has(w));
-    return { total: theirs.length, shared, missing: missing.slice(0, 30) };
+    const stop = new Set(["the","and","for","with","from","this","that","your","you","are","was","has","have","can","will","our","its","into","all","new","best","more","than","per","use","used","the","من","في","على","الى","إلى","عن","مع","هذا","هذه","ذلك","تلك","هو","هي","و","او","أو","منها","عند","بعد","قبل","كما","كل","تم","يتم","ذات","لدى"]);
+    const normalize = (s: string) => s.normalize("NFKC").toLowerCase().replace(/[\u064B-\u065F\u0670ـ]/g, "");
+    const tokenize = (s: string) => (normalize(s).match(/[\p{L}\p{N}]+/gu) ?? []).filter((w) => w.length > 2 && !stop.has(w));
+    const theirTokens = tokenize(competitor);
+    const ownTokens = new Set(tokenize(ownCopy));
+    const counts = new Map<string, number>();
+    for (const word of theirTokens) counts.set(word, (counts.get(word) ?? 0) + 1);
+    const shared = [...counts.keys()].filter((w) => ownTokens.has(w));
+    const missing = [...counts.entries()].filter(([w]) => !ownTokens.has(w)).sort((a,b) => b[1]-a[1]).map(([word,count]) => ({word,count}));
+    const phraseCounts = new Map<string, number>();
+    for (let i=0;i<theirTokens.length-1;i++) {
+      const phrase = theirTokens[i] + " " + theirTokens[i+1];
+      if (!ownCopy || !normalize(ownCopy).includes(phrase)) phraseCounts.set(phrase,(phraseCounts.get(phrase) ?? 0)+1);
+    }
+    const phrases = [...phraseCounts.entries()].sort((a,b)=>b[1]-a[1]).slice(0,20).map(([phrase,count])=>({phrase,count}));
+    const total = counts.size;
+    return { total, shared, missing, phrases, coverage: total ? Math.round((shared.length/total)*100) : 0 };
   }, [competitor, ownCopy]);
+
+  async function saveResearchKeywords() {
+    if (!researchProductId || savingKeywords) return;
+    const candidates = comparison.phrases.slice(0,15).map((x) => x.phrase);
+    const fallback = comparison.missing.slice(0,15).map((x) => x.word);
+    const selected = candidates.length ? candidates : fallback;
+    if (!selected.length) { setKeywordSaveMessage("Paste competitor text to discover keyword candidates first."); return; }
+    setSavingKeywords(true);
+    setKeywordSaveMessage("");
+    try {
+      const product = products.find((p) => p.id === researchProductId);
+      const result = await saveResearchKeywordsAction(researchProductId, product?.marketplace ?? "amazon", selected);
+      setKeywordSaveMessage(result.ok ? `Added ${result.added} keywords to the tracker.` : (result.error ?? "Could not save keywords."));
+    } catch {
+      setKeywordSaveMessage("Could not save keywords. Please try again.");
+    } finally {
+      setSavingKeywords(false);
+    }
+  }
 
   async function askAssistant() {
     if (!assistantQuestion.trim() || assistantPending) return;
@@ -139,19 +172,40 @@ export function IntelligenceStudio({ listings, products, initialBrandVoice }: { 
 
       <section className="grid gap-5 xl:grid-cols-2">
         <div className="card p-5 sm:p-6">
-          <div className="flex items-center gap-2"><Search size={18} /><h2 className="h-section">Competitor Listing Analyzer</h2></div>
-          <p className="mt-2 text-sm text-muted-foreground">الصقي نص Listing المنافس ونص منتجك. الأداة تقارن الكلمات الظاهرة فقط؛ لا تدّعي تحليل ترتيب أو مبيعات المنافس.</p>
-          <label className="label mt-5" htmlFor="competitor-copy">Competitor listing text</label>
-          <textarea id="competitor-copy" className="field min-h-28" value={competitor} onChange={(e) => setCompetitor(e.target.value)} placeholder="Paste competitor title, bullets and description…" />
-          <label className="label mt-4" htmlFor="own-copy">Your listing text</label>
-          <textarea id="own-copy" className="field min-h-28" value={ownCopy} onChange={(e) => setOwnCopy(e.target.value)} placeholder="Paste your listing…" />
-          {(competitor.trim() || ownCopy.trim()) && (
-            <div className="mt-4 rounded-2xl bg-secondary/60 p-4">
-              <p className="text-sm font-semibold">Keyword coverage comparison</p>
-              <p className="mt-1 text-sm text-muted-foreground">{comparison.shared.length} of {comparison.total} distinct competitor terms (over 3 characters) also appear in your text.</p>
-              <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Terms to review</p>
-              <div className="mt-2 flex flex-wrap gap-2">{comparison.missing.length ? comparison.missing.map((w) => <span key={w} className="pill pill-warn">{w}</span>) : <span className="text-sm text-muted-foreground">No missing terms detected in the pasted text.</span>}</div>
-            </div>
+          <div className="flex items-center gap-2"><Search size={18} /><h2 className="h-section">Competitor Intelligence & Keyword Gap</h2></div>
+          <p className="mt-2 text-sm text-muted-foreground">الصقي محتوى المنافس كما يظهر في صفحة المنتج، ثم قارنيه بصفحتك. FLOW يستخرج تكرار الكلمات والعبارات والفجوات من النص فقط؛ لا يعرض Search Volume أو مبيعات غير متاحة.</p>
+          <label className="label mt-5" htmlFor="competitor-copy">Competitor listing (title, bullets, description)</label>
+          <textarea id="competitor-copy" className="field min-h-36" value={competitor} onChange={(e) => setCompetitor(e.target.value)} placeholder="Paste competitor title, bullet points and description…" />
+          <label className="label mt-4" htmlFor="own-copy">Your listing</label>
+          <textarea id="own-copy" className="field min-h-28" value={ownCopy} onChange={(e) => setOwnCopy(e.target.value)} placeholder="Paste your title, bullets and description…" />
+          {competitor.trim() && (
+            <>
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                <div className="rounded-xl bg-secondary/60 p-3"><span className="block text-xs text-muted-foreground">Unique terms</span><strong className="num text-xl">{comparison.total}</strong></div>
+                <div className="rounded-xl bg-secondary/60 p-3"><span className="block text-xs text-muted-foreground">Shared terms</span><strong className="num text-xl">{comparison.shared.length}</strong></div>
+                <div className="rounded-xl bg-secondary/60 p-3"><span className="block text-xs text-muted-foreground">Coverage</span><strong className="num text-xl">{ownCopy.trim() ? `${comparison.coverage}%` : "—"}</strong></div>
+              </div>
+              <div className="mt-4">
+                <div className="flex items-center justify-between gap-2"><p className="text-sm font-semibold">Keyword gaps to review</p><span className="pill pill-warn">{comparison.missing.length} terms</span></div>
+                <div className="mt-2 flex flex-wrap gap-2">{comparison.missing.slice(0,20).map((x) => <span key={x.word} className="pill pill-warn">{x.word}{x.count > 1 ? ` · ${x.count}×` : ""}</span>)}</div>
+              </div>
+              <div className="mt-4">
+                <p className="text-sm font-semibold">Candidate phrases</p>
+                <div className="mt-2 flex flex-wrap gap-2">{comparison.phrases.slice(0,15).map((x) => <span key={x.phrase} className="pill pill-mute">{x.phrase}{x.count > 1 ? ` · ${x.count}×` : ""}</span>)}</div>
+              </div>
+              <div className="mt-5 border-t border-border pt-4">
+                <label className="label" htmlFor="research-product">Save candidates to product keyword tracker</label>
+                <select id="research-product" className="field" value={researchProductId || ""} onChange={(e) => setResearchProductId(Number(e.target.value))}>
+                  <option value="">Choose a product</option>
+                  {products.map((p) => <option key={p.id} value={p.id}>{p.clientName} — {p.name}</option>)}
+                </select>
+                <button type="button" className="btn btn-primary mt-3" disabled={!researchProductId || savingKeywords || (!comparison.phrases.length && !comparison.missing.length)} onClick={() => void saveResearchKeywords()}>
+                  {savingKeywords ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                  {savingKeywords ? "Saving…" : "Save keyword candidates"}
+                </button>
+                {keywordSaveMessage && <p role="status" className="mt-2 text-sm text-muted-foreground">{keywordSaveMessage}</p>}
+              </div>
+            </>
           )}
         </div>
 
