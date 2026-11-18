@@ -518,7 +518,7 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
     const hydrationQuery = /\b(hydra|hydrate|hydration|moistur|cream|gel)\b/i.test(brief.name);
     if (hydrationQuery) {
       addResult(
-        "https://e-dermaelle.com/collections/hyalu-balance/products/dermaelle-hyalubalance-oil-free-hydra-gel-60-ml",
+        "https://e-dermaelle.com/products/dermaelle-hyalubalance-oil-free-hydra-gel-60-ml",
         "Dermaelle official Oil-Free Hydra-Gel 60ml product page",
       );
       addResult("https://e-dermaelle.com/collections/hyalu-balance", "Dermaelle official Hyalubalance collection");
