@@ -474,38 +474,41 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
   // Keep direct RSS/HTML providers as secondary fallbacks, but never depend
   // on their markup being identical across search-engine experiments.
   if (results.length < 3) {
-    const searchUrls = [
-      "https://www.bing.com/search?format=rss&q=" + encodeURIComponent(query),
-      "https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query),
-    ];
-    for (const searchUrl of searchUrls) {
-      try {
-        const response = await fetch(searchUrl, {
-          headers: { "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36", accept: "application/rss+xml, application/xml, text/html;q=0.9, */*;q=0.8" },
-          signal: AbortSignal.timeout(12_000), cache: "no-store",
-        });
-        if (!response.ok) continue;
-        searchWasAvailable = true;
-        const searchText = await response.text();
-        if (/format=rss/i.test(searchUrl)) {
-          const items = searchText.match(/<item\b[\s\S]*?<\/item>/gi) ?? [];
-          for (const item of items) {
-            const getTag = (tag: string) => item.match(new RegExp("<" + tag + "[^>]*>([\\s\\S]*?)</" + tag + ">", "i"))?.[1] ?? "";
-            const rawUrl = getTag("link").replace(/<!\\[CDATA\\[|\\]\\]>/g, "").trim();
-            const title = getTag("title").replace(/<!\\[CDATA\\[|\\]\\]>/g, "").replace(/<[^>]+>/g, " ").trim();
-            const snippet = getTag("description").replace(/<!\\[CDATA\\[|\\]\\]>/g, "").replace(/<[^>]+>/g, " ").trim();
-            addResult(rawUrl, title, snippet);
+    for (const query of queries) {
+      const searchUrls = [
+        "https://www.bing.com/search?format=rss&q=" + encodeURIComponent(query),
+        "https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query),
+      ];
+      for (const searchUrl of searchUrls) {
+        try {
+          const response = await fetch(searchUrl, {
+            headers: { "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36", accept: "application/rss+xml, application/xml, text/html;q=0.9, */*;q=0.8" },
+            signal: AbortSignal.timeout(12_000), cache: "no-store",
+          });
+          if (!response.ok) continue;
+          searchWasAvailable = true;
+          const searchText = await response.text();
+          if (/format=rss/i.test(searchUrl)) {
+            const items = searchText.match(/<item\\b[\\s\\S]*?<\\/item>/gi) ?? [];
+            for (const item of items) {
+              const getTag = (tag: string) => item.match(new RegExp("<" + tag + "[^>]*>([\\s\\S]*?)</" + tag + ">", "i"))?.[1] ?? "";
+              const rawUrl = getTag("link").replace(/<!\\[CDATA\\[|\\]\\]>/g, "").trim();
+              const title = getTag("title").replace(/<!\\[CDATA\\[|\\]\\]>/g, "").replace(/<[^>]+>/g, " ").trim();
+              const snippet = getTag("description").replace(/<!\\[CDATA\\[|\\]\\]>/g, "").replace(/<[^>]+>/g, " ").trim();
+              addResult(rawUrl, title, snippet);
+            }
+          } else {
+            const blocks = searchText.split(/class=["']result(?:\\s|")/i).slice(1, 9);
+            for (const block of blocks) {
+              const anchor = block.match(/<a[^>]*class=["'][^"']*result__a[^"']*["'][^>]*href=["']([^"']+)["'][^>]*>([\\s\\S]*?)<\\/a>/i);
+              if (!anchor) continue;
+              addResult(anchor[1], anchor[2], "");
+            }
           }
-        } else {
-          const blocks = searchText.split(/class=["']result(?:\s|")/i).slice(1, 9);
-          for (const block of blocks) {
-            const anchor = block.match(/<a[^>]*class=["'][^"']*result__a[^"']*["'][^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/i);
-            if (!anchor) continue;
-            addResult(anchor[1], anchor[2], "");
-          }
-        }
-        if (results.length >= 5) break;
-      } catch { /* try the next public search provider */ }
+          if (results.length >= 5) break;
+        } catch { /* try the next public search provider */ }
+      }
+      if (results.length >= 5) break;
     }
   }
   // Some brands publish a complete catalogue that is more reliable than search
