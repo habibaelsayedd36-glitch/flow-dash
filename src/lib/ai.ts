@@ -571,10 +571,30 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
       if (!response.ok) return { ...result, page: "" };
       const html = await response.text();
       const page = htmlToResearchText(html).slice(0, 9000);
-      return { ...result, page: page.length > 300 ? page : "" };
-    } catch {
-      return { ...result, page: "" };
-    }
+      if (page.length > 300) return { ...result, page };
+    } catch { /* try the Shopify product JSON endpoint */ }
+    // Shopify exposes a structured product endpoint that is often readable
+    // even when its storefront HTML or Reader conversion is not.
+    try {
+      const jsonUrl = result.url.replace(/\\/$/, "") + ".js";
+      const response = await fetch(jsonUrl, {
+        headers: { accept: "application/json" },
+        signal: AbortSignal.timeout(12_000),
+        cache: "no-store",
+      });
+      if (response.ok) {
+        const product = await response.json() as { title?: string; vendor?: string; product_type?: string; tags?: string[]; description?: string; body_html?: string };
+        const page = [
+          product.title ? "Product: " + product.title : "",
+          product.vendor ? "Brand: " + product.vendor : "",
+          product.product_type ? "Category: " + product.product_type : "",
+          product.tags?.length ? "Tags: " + product.tags.join(", ") : "",
+          htmlToResearchText(product.description || product.body_html || ""),
+        ].filter(Boolean).join("\\n").slice(0, 9000);
+        if (page.length > 300) return { ...result, page };
+      }
+    } catch { /* no readable source available */ }
+    return { ...result, page: "" };
   }));
   const readablePages = pages.filter((item) => item.page.length > 300);
   if (!readablePages.length) {
@@ -584,8 +604,8 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
   // Pass the readable source excerpts into the one listing-generation request;
   // the listing model can write both languages directly from those excerpts.
   const sourceFacts = readablePages.map((item, i) =>
-    "[Verified public source " + (i + 1) + "] " + item.url + "\\n" + item.page
-  ).join("\\n\\n").slice(0, 8500);
+    "[Verified public source " + (i + 1) + "] " + item.url + "\n" + item.page
+  ).join("\n\n").slice(0, 8500);
   const features = brief.features.trim() || sourceFacts;
   const researched: ProductBrief = {
     ...brief,
