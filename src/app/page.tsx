@@ -1,5 +1,7 @@
 import { CheckCheck, Plus, Sparkles, Zap } from "lucide-react";
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { auth } from "@/lib/auth/server";
 import { GridPattern } from "@/components/Brand";
 import { Empty, MarketBadge, PageHeader, RunItem, ScoreBadge, StatCard, pname, taskTitle } from "@/components/ui";
 import { getClients, getOverview, getRuns, getTasks } from "@/lib/data";
@@ -12,6 +14,9 @@ export const dynamic = "force-dynamic";
 const LINK = "shrink-0 rounded text-sm font-medium text-flow-green hover:underline";
 
 export default async function OverviewPage() {
+  const { data: session } = await auth.getSession();
+  if (!session?.user) redirect("/auth/sign-in");
+
   const { locale, t } = await getI18n();
   const [o, g, tasks, runs, clients] = await Promise.all([getOverview(), getGrowthOverview(), getTasks({ done: false, limit: 5 }), getRuns(6), getClients()]);
   const maxStage = Math.max(1, ...o.stages.map((s) => s.n));
