@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   Megaphone,
   Menu,
+  Package,
   Settings,
   ShoppingBag,
   Star,
@@ -46,6 +47,7 @@ const GROUPS: { label: string | null; items: Item[] }[] = [
   {
     label: "Commerce Hub",
     items: [
+      { href: "/products", label: "Product Catalog", icon: Package },
       { href: "/orders", label: "Orders", icon: ShoppingBag },
       { href: "/pipeline", label: "Studio Pipeline", icon: Kanban },
       { href: "/clients", label: "Clients", icon: Users, also: ["/billing"] },
