@@ -2,6 +2,7 @@ import { ShieldAlert } from "lucide-react";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { AiKeyForm } from "@/components/AiKeyForm";
+import { DeleteAllDataButton } from "@/components/DeleteAllDataButton";
 import { PageHeader } from "@/components/ui";
 import { PROVIDERS, getAiProvider, maskKey, type ProviderId } from "@/lib/ai";
 
@@ -34,6 +35,14 @@ export default async function SettingsPage() {
             providers={(Object.keys(PROVIDERS) as ProviderId[]).map((id) => ({ id, label: PROVIDERS[id].label, defaultModel: PROVIDERS[id].defaultModel }))}
             current={provider ? { id: provider.id, label: provider.label, model: provider.model, masked: maskKey(provider.key), source: provider.source } : null}
           />
+
+          <section className="card border border-red-200 p-5 sm:p-6" aria-labelledby="data-delete-title">
+            <h2 id="data-delete-title" className="h-section text-red-700">Danger zone · Delete data</h2>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+              Permanently clear all clients, products, listings, invoices, leads and operational records. Login accounts and system settings are preserved. This cannot be undone.
+            </p>
+            <div className="mt-4"><DeleteAllDataButton /></div>
+          </section>
 
           <section id="lead-intake" className="card scroll-mt-24 p-5 sm:p-6" aria-labelledby="intake-title">
             <h2 id="intake-title" className="h-section">Website lead form</h2>
