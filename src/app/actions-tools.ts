@@ -331,6 +331,7 @@ export async function portalDecisionAction(token: string, listingId: number, dec
 export type StatementState = { ok?: boolean; error?: string };
 
 export async function createStatementAction(_prev: StatementState, fd: FormData): Promise<StatementState> {
+  await requireUser();
   await ensureDb();
   const clientId = clamp(fd.get("clientId"), 1, 2_000_000_000, 0);
   const month = String(fd.get("month") ?? "");
@@ -350,12 +351,14 @@ export async function createStatementAction(_prev: StatementState, fd: FormData)
 }
 
 export async function toggleStatementPaidAction(id: number, paid: boolean) {
+  await requireUser();
   await ensureDb();
   await db.update(statements).set({ paid: Boolean(paid) }).where(eq(statements.id, id));
   refresh();
 }
 
 export async function deleteStatementAction(id: number) {
+  await requireUser();
   await ensureDb();
   await db.delete(statements).where(eq(statements.id, id));
   refresh();
