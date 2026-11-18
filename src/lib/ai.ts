@@ -477,7 +477,7 @@ function isRelevantResearchPage(
     .replace(/\s+/g, " ").trim();
   const exactNameMatch = normalizedName.length >= 8 && normalizedPage.includes(normalizedName);
   const matchedBrandTokens = brandTokens.filter((token) => searchable.has(token)).length;
-  const brandOverlap = brandTokens.length ? matchedBrandTokens.length / brandTokens.length : 1;
+  const brandOverlap = brandTokens.length ? matchedBrandTokens / brandTokens.length : 1;
   // Retailer pages often omit the brand in the body, while brand stores may
   // abbreviate product names. Accept a strong product-name match or a
   // reasonable product + brand match; do not require every brand token.
