@@ -14,7 +14,6 @@ import {
   Menu,
   Settings,
   ShoppingBag,
-  Sparkles,
   Star,
   TrendingUp,
   Users,
@@ -34,7 +33,6 @@ const GROUPS: { label: string | null; items: Item[] }[] = [
     label: null,
     items: [
       { href: "/", label: "Overview", icon: LayoutDashboard },
-      { href: "/studio", label: "AI Listing Studio", icon: Sparkles },
       { href: "/listings", label: "Listings", icon: FileText },
     ],
   },
