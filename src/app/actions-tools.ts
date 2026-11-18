@@ -1,5 +1,7 @@
 "use server";
 
+
+import { requireUser } from "@/lib/auth/server";
 import { and, count, eq, inArray, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
@@ -27,6 +29,7 @@ async function setSetting(key: string, value: string) {
 export type KeyState = { ok?: boolean; error?: string };
 
 export async function saveAiKeyAction(_prev: KeyState, fd: FormData): Promise<KeyState> {
+  await requireUser();
   await ensureDb();
   const provider = String(fd.get("provider") ?? "");
   const key = String(fd.get("key") ?? "").trim();
@@ -43,6 +46,7 @@ export async function saveAiKeyAction(_prev: KeyState, fd: FormData): Promise<Ke
 }
 
 export async function removeAiKeyAction() {
+  await requireUser();
   await ensureDb();
   await db.delete(settings).where(inArray(settings.key, ["ai_provider", "ai_key", "ai_model"]));
   refresh();
@@ -50,6 +54,7 @@ export async function removeAiKeyAction() {
 
 /** Makes one real request to the provider and reports exactly what came back. */
 export async function testAiAction(): Promise<{ ok: boolean; message: string }> {
+  await requireUser();
   await ensureDb();
   const provider = await getAiProvider();
   if (!provider) return { ok: false, message: "No API key is saved yet." };
@@ -67,6 +72,7 @@ export async function startListingJobAction(
   jobId: number,
   input: { clientId: number | null; marketplace: string; productType: string; tone: string; mapping: Mapping },
 ): Promise<{ ok: boolean; error?: string }> {
+  await requireUser();
   await ensureDb();
   const [job] = await db.select().from(jobs).where(eq(jobs.id, jobId));
   if (!job || job.status !== "draft") return { ok: false, error: "This job has already started." };
@@ -128,6 +134,7 @@ async function recount(jobId: number) {
 }
 
 export async function processJobItemAction(jobId: number, index: number): Promise<{ ok: boolean; pause?: boolean }> {
+  await requireUser();
   await ensureDb();
   const [job] = await db.select().from(jobs).where(eq(jobs.id, jobId));
   const item = job?.items[index];
@@ -188,6 +195,7 @@ export async function processJobItemAction(jobId: number, index: number): Promis
 }
 
 export async function retryFailedJobItemsAction(jobId: number): Promise<{ ok: boolean; count: number }> {
+  await requireUser();
   await ensureDb();
   const [job] = await db.select().from(jobs).where(eq(jobs.id, jobId));
   if (!job || job.imported) return { ok: false, count: 0 };
@@ -200,12 +208,14 @@ export async function retryFailedJobItemsAction(jobId: number): Promise<{ ok: bo
 }
 
 export async function pauseJobAction(jobId: number) {
+  await requireUser();
   await ensureDb();
   await db.update(jobs).set({ status: "paused" }).where(eq(jobs.id, jobId));
   refresh();
 }
 
 export async function finishJobAction(jobId: number) {
+  await requireUser();
   await ensureDb();
   await recount(jobId);
   refresh();
@@ -213,6 +223,7 @@ export async function finishJobAction(jobId: number) {
 
 /** A person has checked the estimates for this row: clear the flags so they flow into the flat file. */
 export async function verifyJobItemAction(jobId: number, index: number) {
+  await requireUser();
   await ensureDb();
   const [job] = await db.select().from(jobs).where(eq(jobs.id, jobId));
   const item = job?.items[index];
@@ -223,6 +234,7 @@ export async function verifyJobItemAction(jobId: number, index: number) {
 }
 
 export async function importJobAction(jobId: number): Promise<{ ok: boolean; created: number; error?: string }> {
+  await requireUser();
   await ensureDb();
   const [job] = await db.select().from(jobs).where(eq(jobs.id, jobId));
   if (!job || job.imported) return { ok: false, created: 0, error: "Already added to the pipeline." };
@@ -254,6 +266,7 @@ export async function importJobAction(jobId: number): Promise<{ ok: boolean; cre
 
 /** Image jobs run entirely in the browser; only a record of the run is kept. */
 export async function logImageJobAction(input: { type: "cleanup" | "shots"; title: string; total: number; flagged: number; marketplace: string }) {
+  await requireUser();
   await ensureDb();
   await db.insert(jobs).values({
     type: input.type === "shots" ? "shots" : "cleanup",
@@ -269,12 +282,14 @@ export async function logImageJobAction(input: { type: "cleanup" | "shots"; titl
 // ------------------------------------------------------------ client portal
 
 export async function createShareLinkAction(clientId: number) {
+  await requireUser();
   await ensureDb();
   await db.update(clients).set({ shareToken: randomUUID().replace(/-/g, "") }).where(eq(clients.id, clientId));
   refresh();
 }
 
 export async function revokeShareLinkAction(clientId: number) {
+  await requireUser();
   await ensureDb();
   await db.update(clients).set({ shareToken: null }).where(eq(clients.id, clientId));
   refresh();
