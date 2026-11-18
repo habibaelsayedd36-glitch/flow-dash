@@ -108,7 +108,10 @@ export function JobRunner({ jobId, items, hasClient, clientName, imported, statu
         <div className="mt-5 h-2 overflow-hidden rounded-full bg-sage" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Job progress">
           <div className="h-full rounded-full bg-moss transition-[width] duration-300" style={{ width: `${pct}%` }} />
         </div>
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">\n          <p className="text-sm text-mute">Progress is saved after every product. You can pause and resume this batch at any time.</p>\n          <button type="button" className="btn btn-ghost" onClick={async () => { await pauseJobAction(jobId); router.refresh(); }}>Pause batch</button>\n        </div>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-mute">Progress is saved after every product. You can pause and resume this batch at any time.</p>
+          <button type="button" className="btn btn-ghost" onClick={async () => { await pauseJobAction(jobId); router.refresh(); }}>Pause batch</button>
+        </div>
       </section>
     );
   }
