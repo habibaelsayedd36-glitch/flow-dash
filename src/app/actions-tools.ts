@@ -9,7 +9,7 @@ import { clients, jobs, listings, products, settings, statements, tasks, type Jo
 import { SPEC_KEYS, generateJobItem, getAiProvider, isProviderId, testProvider, type SpecKey } from "@/lib/ai";
 import { PLANS, TONES, isMarketplace, type PlanId } from "@/lib/catalog";
 import { checkQuota, emit } from "@/lib/engine";
-import { FIELDS, isFlagged, type Mapping } from "@/lib/job-fields";
+import { isFlagged, type Mapping } from "@/lib/job-fields";
 import { scoreListing, type ProductBrief } from "@/lib/rules";
 
 const refresh = () => revalidatePath("/", "layout");
