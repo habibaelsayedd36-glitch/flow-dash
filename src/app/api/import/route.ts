@@ -112,6 +112,8 @@ function orderStatus(v: string): string {
 }
 
 export async function POST(req: Request) {
+  const unauthorized = await requireApiUser();
+  if (unauthorized) return unauthorized;
   await ensureDb();
   let form: FormData;
   try {
