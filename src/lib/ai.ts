@@ -503,34 +503,21 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
   if (!searchWasAvailable) throw new Error("FLOW could not reach its public product research service. Please retry in a moment.");
   if (!results.length) throw new Error("FLOW could not find public product sources for this exact name. Add a brand or model number and retry.");
 
-  // Read the top matching pages through Reader first, then try the original
-  // page directly. Three source pages are enough to ground a concise brief
-  // without exhausting the no-key Reader rate limit.
+  // Read source pages as clean Markdown through Reader. This avoids fragile
+  // per-site HTML parsing and keeps product facts grounded in the page content.
   const pages = await Promise.all(results.slice(0, 3).map(async (result) => {
     try {
-      const readerUrl = "https://r.jina.ai/" + result.url;
-      const readerResponse = await fetch(readerUrl, {
+      const response = await fetch("https://r.jina.ai/" + result.url, {
         headers: { accept: "text/plain, text/markdown, */*" },
-        signal: AbortSignal.timeout(20_000), cache: "no-store",
-      });
-      if (readerResponse.ok) {
-        const page = (await readerResponse.text()).slice(0, 6500);
-        if (page.trim()) return { ...result, page };
-      }
-    } catch { /* direct fetch fallback below */ }
-    try {
-      const response = await fetch(result.url, {
-        headers: { "user-agent": "Mozilla/5.0 (compatible; FLOWProductResearch/1.0)" },
-        signal: AbortSignal.timeout(8_000), cache: "no-store",
+        signal: AbortSignal.timeout(20_000),
+        cache: "no-store",
       });
       if (!response.ok) return { ...result, page: "" };
-      const html = (await response.text()).slice(0, 500_000);
-      const title = html.match(/<title[^>]*>([\\s\\S]*?)<\\/title>/i)?.[1] || result.title;
-      const description = html.match(/<meta[^>]+(?:name|property)=["'](?:description|og:description)["'][^>]+content=["']([^"']*)["']/i)?.[1] || "";
-      const body = html.replace(/<(script|style|svg|noscript)[^>]*>[\\s\\S]*?<\\/\\1>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
-      const page = decodeResearchHtml([title, description, body.slice(0, 7000)].join(" ")).slice(0, 6000);
+      const page = (await response.text()).slice(0, 6500);
       return { ...result, page };
-    } catch { return { ...result, page: "" }; }
+    } catch {
+      return { ...result, page: "" };
+    }
   }));
   const sourceText = pages.map((item, i) =>
     "[Source " + (i + 1) + "] " + item.url + "\nSearch title: " + item.title + "\nSearch snippet: " + item.snippet + "\nPage text: " + (item.page || "(page could not be opened)")
