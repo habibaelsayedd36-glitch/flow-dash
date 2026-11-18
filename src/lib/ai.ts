@@ -415,59 +415,109 @@ function decodeResearchHtml(value: string): string {
 async function researchProductBrief(provider: AiProvider, brief: ProductBrief): Promise<ProductResearch> {
   const query = [brief.brand, brief.name, "official product details ingredients specifications"].filter(Boolean).join(" ");
   const results: Array<{ url: string; title: string; snippet: string }> = [];
-  const searchUrls = [
-    "https://www.bing.com/search?format=rss&q=" + encodeURIComponent(query),
-    "https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query),
-  ];
+  const seen = new Set<string>();
   let searchWasAvailable = false;
-  for (const searchUrl of searchUrls) {
+  const addResult = (rawUrl: string, rawTitle: string, rawSnippet = "") => {
+    try {
+      let href = decodeResearchHtml(rawUrl.trim()).replace(/[),.;]+$/, "");
+      if (href.startsWith("//")) href = "https:" + href;
+      const parsed = new URL(href);
+      if (!["http:", "https:"].includes(parsed.protocol)) return;
+      if (/google\.|bing\.com|duckduckgo\.com|youtube\.com|youtu\.be|facebook\.com|instagram\.com|tiktok\.com|pinterest\.|googleusercontent\.com|gstatic\.com|microsoft\.com\/bing/i.test(parsed.hostname)) return;
+      if (seen.has(parsed.href)) return;
+      const title = decodeResearchHtml(rawTitle.replace(/<[^>]+>/g, " ").replace(/\\s+/g, " ")).trim();
+      if (!title || title.length < 3) return;
+      seen.add(parsed.href);
+      results.push({ url: parsed.href, title, snippet: decodeResearchHtml(rawSnippet.replace(/<[^>]+>/g, " ").replace(/\\s+/g, " ")).trim() });
+    } catch { /* ignore malformed search results */ }
+  };
+
+  // Use Jina Reader as a server-side search-page reader first. It converts
+  // Google/Bing result pages into clean text and avoids brittle HTML selectors
+  // and search-engine bot challenges from Vercel serverless IPs.
+  const readerSearchUrls = [
+    "https://r.jina.ai/http://www.google.com/search?q=" + encodeURIComponent(query),
+    "https://r.jina.ai/http://www.bing.com/search?q=" + encodeURIComponent(query),
+  ];
+  for (const searchUrl of readerSearchUrls) {
     try {
       const response = await fetch(searchUrl, {
-        headers: { "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36", accept: "application/rss+xml, application/xml, text/html;q=0.9, */*;q=0.8" },
-        signal: AbortSignal.timeout(12_000), cache: "no-store",
+        headers: { accept: "text/plain, text/markdown, */*" },
+        signal: AbortSignal.timeout(20_000),
+        cache: "no-store",
       });
       if (!response.ok) continue;
       searchWasAvailable = true;
-      const searchText = await response.text();
-      if (/format=rss/i.test(searchUrl)) {
-        const items = searchText.match(/<item\b[\s\S]*?<\/item>/gi) ?? [];
-        for (const item of items) {
-          const getTag = (tag: string) => item.match(new RegExp("<" + tag + "[^>]*>([\\s\\S]*?)<\\/" + tag + ">", "i"))?.[1] ?? "";
-          const rawUrl = decodeResearchHtml(getTag("link").replace(/<!\[CDATA\[|\]\]>/g, "").trim());
-          try {
-            const parsed = new URL(rawUrl);
-            if (!["http:", "https:"].includes(parsed.protocol) || /youtube\.com|youtu\.be|facebook\.com|instagram\.com|tiktok\.com|pinterest\./i.test(parsed.hostname)) continue;
-            const title = decodeResearchHtml(getTag("title").replace(/<!\[CDATA\[|\]\]>/g, "").replace(/<[^>]+>/g, " ").trim());
-            const snippet = decodeResearchHtml(getTag("description").replace(/<!\[CDATA\[|\]\]>/g, "").replace(/<[^>]+>/g, " ").trim());
-            if (title && !results.some((entry) => entry.url === parsed.href)) results.push({ url: parsed.href, title, snippet });
-          } catch { /* ignore malformed search results */ }
-        }
-      } else {
-        const blocks = searchText.split(/class=["']result(?:\s|")/i).slice(1, 9);
-        for (const block of blocks) {
-          const anchor = block.match(/<a[^>]*class=["'][^"']*result__a[^"']*["'][^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/i);
-          if (!anchor) continue;
-          let href = decodeResearchHtml(anchor[1]);
-          try {
-            if (href.startsWith("//")) href = "https:" + href;
-            const parsed = new URL(href);
-            const target = parsed.searchParams.get("uddg") || href;
-            const targetUrl = new URL(target);
-            if (!["http:", "https:"].includes(targetUrl.protocol) || /youtube\.com|youtu\.be|facebook\.com|instagram\.com|tiktok\.com|pinterest\./i.test(targetUrl.hostname)) continue;
-            const title = decodeResearchHtml(anchor[2].replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
-            const snippetMatch = block.match(/class=["'][^"']*result__snippet[^"']*["'][^>]*>([\s\S]*?)<\/(?:a|td|div)>/i);
-            const snippet = snippetMatch ? decodeResearchHtml(snippetMatch[1].replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim() : "";
-            if (title && !results.some((entry) => entry.url === targetUrl.href)) results.push({ url: targetUrl.href, title, snippet });
-          } catch { /* ignore malformed search results */ }
+      const text = (await response.text()).slice(0, 35_000);
+      const markdownLinks = /\\[([^\\]]{3,240})\\]\\((https?:\\/\\/[^)\\s]+)\\)/g;
+      for (const match of text.matchAll(markdownLinks)) {
+        addResult(match[2], match[1], "");
+      }
+      // Reader may return plain URLs instead of Markdown links for some pages.
+      if (!results.length) {
+        for (const match of text.matchAll(/https?:\\/\\/[^\\s<>"]+/g)) {
+          addResult(match[0], text.slice(Math.max(0, match.index! - 160), match.index!).split("\\n").filter(Boolean).slice(-1)[0] || "Product source", "");
         }
       }
       if (results.length >= 5) break;
-    } catch { /* try the next public search provider */ }
+    } catch { /* try the next search route */ }
   }
-  if (!searchWasAvailable) throw new Error("FLOW's public product search providers are temporarily unavailable. Please retry in a moment.");
+
+  // Keep direct RSS/HTML providers as secondary fallbacks, but never depend
+  // on their markup being identical across search-engine experiments.
+  if (results.length < 3) {
+    const searchUrls = [
+      "https://www.bing.com/search?format=rss&q=" + encodeURIComponent(query),
+      "https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query),
+    ];
+    for (const searchUrl of searchUrls) {
+      try {
+        const response = await fetch(searchUrl, {
+          headers: { "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36", accept: "application/rss+xml, application/xml, text/html;q=0.9, */*;q=0.8" },
+          signal: AbortSignal.timeout(12_000), cache: "no-store",
+        });
+        if (!response.ok) continue;
+        searchWasAvailable = true;
+        const searchText = await response.text();
+        if (/format=rss/i.test(searchUrl)) {
+          const items = searchText.match(/<item\\b[\\s\\S]*?<\\/item>/gi) ?? [];
+          for (const item of items) {
+            const getTag = (tag: string) => item.match(new RegExp("<" + tag + "[^>]*>([\\\\s\\\\S]*?)<\\\\/" + tag + ">", "i"))?.[1] ?? "";
+            const rawUrl = getTag("link").replace(/<!\\[CDATA\\[|\\]\\]>/g, "").trim();
+            const title = getTag("title").replace(/<!\\[CDATA\\[|\\]\\]>/g, "").replace(/<[^>]+>/g, " ").trim();
+            const snippet = getTag("description").replace(/<!\\[CDATA\\[|\\]\\]>/g, "").replace(/<[^>]+>/g, " ").trim();
+            addResult(rawUrl, title, snippet);
+          }
+        } else {
+          const blocks = searchText.split(/class=["']result(?:\\s|")/i).slice(1, 9);
+          for (const block of blocks) {
+            const anchor = block.match(/<a[^>]*class=["'][^"']*result__a[^"']*["'][^>]*href=["']([^"']+)["'][^>]*>([\\s\\S]*?)<\\/a>/i);
+            if (!anchor) continue;
+            addResult(anchor[1], anchor[2], "");
+          }
+        }
+        if (results.length >= 5) break;
+      } catch { /* try the next public search provider */ }
+    }
+  }
+  if (!searchWasAvailable) throw new Error("FLOW could not reach its public product research service. Please retry in a moment.");
   if (!results.length) throw new Error("FLOW could not find public product sources for this exact name. Add a brand or model number and retry.");
 
-  const pages = await Promise.all(results.slice(0, 5).map(async (result) => {
+  // Read the top matching pages through Reader first, then try the original
+  // page directly. Three source pages are enough to ground a concise brief
+  // without exhausting the no-key Reader rate limit.
+  const pages = await Promise.all(results.slice(0, 3).map(async (result) => {
+    try {
+      const readerUrl = "https://r.jina.ai/" + result.url;
+      const readerResponse = await fetch(readerUrl, {
+        headers: { accept: "text/plain, text/markdown, */*" },
+        signal: AbortSignal.timeout(20_000), cache: "no-store",
+      });
+      if (readerResponse.ok) {
+        const page = (await readerResponse.text()).slice(0, 6500);
+        if (page.trim()) return { ...result, page };
+      }
+    } catch { /* direct fetch fallback below */ }
     try {
       const response = await fetch(result.url, {
         headers: { "user-agent": "Mozilla/5.0 (compatible; FLOWProductResearch/1.0)" },
@@ -475,9 +525,9 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
       });
       if (!response.ok) return { ...result, page: "" };
       const html = (await response.text()).slice(0, 500_000);
-      const title = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || result.title;
+      const title = html.match(/<title[^>]*>([\\s\\S]*?)<\\/title>/i)?.[1] || result.title;
       const description = html.match(/<meta[^>]+(?:name|property)=["'](?:description|og:description)["'][^>]+content=["']([^"']*)["']/i)?.[1] || "";
-      const body = html.replace(/<(script|style|svg|noscript)[^>]*>[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+      const body = html.replace(/<(script|style|svg|noscript)[^>]*>[\\s\\S]*?<\\/\\1>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\\s+/g, " ");
       const page = decodeResearchHtml([title, description, body.slice(0, 7000)].join(" ")).slice(0, 6000);
       return { ...result, page };
     } catch { return { ...result, page: "" }; }
