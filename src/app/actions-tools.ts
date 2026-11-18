@@ -158,14 +158,16 @@ export async function processJobItemAction(jobId: number, index: number): Promis
   }
   try {
     const made = await generateJobItem(provider, brief, m, job.tone, known, unknown);
+    const listingContent = made.content;
+    if (!listingContent) throw new Error("The AI provider returned no listing content.");
     const out: JobItem = {
-      source: s, status: "done", engine: "ai", content: made.content,
+      source: s, status: "done", engine: "ai", content: listingContent,
       estimated: unknown.filter((k) => made.specs[k]),
       missing: unknown.filter((k) => !made.specs[k]),
       specs: { ...known, ...made.specs }, notes: [],
     };
-    if (!out.content.titleAr) out.notes?.push("no_arabic");
-    out.score = scoreListing(out.content, m, { brand: brief.brand, keywords: "" });
+    if (!listingContent.titleAr) out.notes?.push("no_arabic");
+    out.score = scoreListing(listingContent, m, { brand: brief.brand, keywords: "" });
     await writeItem(jobId, index, out);
     return { ok: true };
   } catch (e) {
