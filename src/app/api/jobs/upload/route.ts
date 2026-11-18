@@ -1,3 +1,4 @@
+import { requireApiUser } from "@/lib/auth/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { ensureDb } from "@/db/ensure";
