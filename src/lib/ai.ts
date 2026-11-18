@@ -328,11 +328,15 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
       const retryableFailure = ["(429):", "(500):", "(502):", "(503):", "(504):"].some((status) => message.includes(status));
       if (p.id !== "groq" || !retryableFailure || p.model === "qwen/qwen3.8-27b") throw error;
 
-      // The two GPT-OSS models share the same free-tier daily token ceiling.
-      // If 120B is capped, try 20B once, then use Qwen 3.8 as a separate
-      // fallback pool. Keep the same connected Groq key; no new key is needed.
+      // GPT-OSS 120B and 20B share the same free-tier daily token ceiling.
+      // When the error is a daily-token cap, skip 20B and go straight to Qwen,
+      // which has a separate model quota. For short-window errors, try 20B first.
+      // Keep the same connected Groq key; no additional API key is required.
+      const dailyTokenLimit = /tokens per day|daily token|TPD/i.test(message);
       const fallbacks = p.model === "openai/gpt-oss-120b"
-        ? ["openai/gpt-oss-20b", "qwen/qwen3.8-27b"]
+        ? dailyTokenLimit
+          ? ["qwen/qwen3.8-27b", "openai/gpt-oss-20b"]
+          : ["openai/gpt-oss-20b", "qwen/qwen3.8-27b"]
         : ["qwen/qwen3.8-27b"];
       let lastError: unknown = error;
       let recovered = false;
