@@ -1,5 +1,7 @@
 "use server";
 
+
+import { requireUser } from "@/lib/auth/server";
 import { and, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
@@ -37,6 +39,7 @@ async function clientOf(fd: FormData) {
 // ------------------------------------------------------------------- orders
 
 export async function createOrderAction(_prev: GrowthState, fd: FormData): Promise<GrowthState> {
+  await requireUser();
   await ensureDb();
   const client = await clientOf(fd);
   const orderRef = text(fd, "orderRef", 80);
@@ -61,6 +64,7 @@ export async function createOrderAction(_prev: GrowthState, fd: FormData): Promi
 }
 
 export async function setOrderStatusAction(id: number, status: string) {
+  await requireUser();
   await ensureDb();
   if (!(ORDER_STATUSES as readonly string[]).includes(status)) return;
   const [before] = await db.select().from(orders).where(eq(orders.id, id));
@@ -73,6 +77,7 @@ export async function setOrderStatusAction(id: number, status: string) {
 }
 
 export async function deleteOrderAction(id: number) {
+  await requireUser();
   await ensureDb();
   await db.delete(orders).where(eq(orders.id, id));
   refresh();
@@ -81,6 +86,7 @@ export async function deleteOrderAction(id: number) {
 // ---------------------------------------------------------------- inventory
 
 export async function setStockAction(productId: number, values: Record<string, number>): Promise<Result> {
+  await requireUser();
   await ensureDb();
   const stock = whole(values.stock, 0, 10_000_000, -1);
   if (stock < 0) return { ok: false, message: "Enter the units on hand." };
@@ -98,6 +104,7 @@ export async function setStockAction(productId: number, values: Record<string, n
 // ----------------------------------------------------------------- keywords
 
 export async function createKeywordsAction(_prev: GrowthState, fd: FormData): Promise<GrowthState> {
+  await requireUser();
   await ensureDb();
   const productId = whole(fd.get("productId"), 0, 2_000_000_000, 0);
   const [product] = productId ? await db.select().from(products).where(eq(products.id, productId)) : [];
@@ -120,6 +127,7 @@ export async function saveResearchKeywordsAction(
   marketplaceValue: string,
   rawKeywords: string[],
 ): Promise<{ ok: boolean; added: number; error?: string }> {
+  await requireUser();
   await ensureDb();
   const [product] = await db.select().from(products).where(eq(products.id, whole(productId, 0, 2_000_000_000, 0)));
   if (!product) return { ok: false, added: 0, error: "Choose a valid product first." };
@@ -139,6 +147,7 @@ export async function saveResearchKeywordsAction(
 }
 
 export async function logRankAction(id: number, values: Record<string, number>): Promise<Result> {
+  await requireUser();
   await ensureDb();
   const rank = whole(values.rank, 0, 1000, 0);
   if (rank < 1) return { ok: false, message: "Enter a position from 1 to 1000." };
@@ -149,6 +158,7 @@ export async function logRankAction(id: number, values: Record<string, number>):
 }
 
 export async function deleteKeywordAction(id: number) {
+  await requireUser();
   await ensureDb();
   await db.delete(keywords).where(eq(keywords.id, id));
   refresh();
@@ -157,6 +167,7 @@ export async function deleteKeywordAction(id: number) {
 // -------------------------------------------------------------- advertising
 
 export async function saveCampaignAction(_prev: GrowthState, fd: FormData): Promise<GrowthState> {
+  await requireUser();
   await ensureDb();
   const client = await clientOf(fd);
   const name = text(fd, "name", 120);
@@ -186,6 +197,7 @@ export async function saveCampaignAction(_prev: GrowthState, fd: FormData): Prom
 }
 
 export async function deleteCampaignAction(id: number) {
+  await requireUser();
   await ensureDb();
   await db.delete(adCampaigns).where(eq(adCampaigns.id, id));
   refresh();
@@ -194,6 +206,7 @@ export async function deleteCampaignAction(id: number) {
 // ------------------------------------------------------- reviews and health
 
 export async function createReviewAction(_prev: GrowthState, fd: FormData): Promise<GrowthState> {
+  await requireUser();
   await ensureDb();
   const client = await clientOf(fd);
   if (!client) return { error: "Choose a client." };
@@ -222,6 +235,7 @@ export async function createReviewAction(_prev: GrowthState, fd: FormData): Prom
 }
 
 export async function setReviewStatusAction(id: number, status: string) {
+  await requireUser();
   await ensureDb();
   if (!(REVIEW_STATUSES as readonly string[]).includes(status)) return;
   await db.update(reviews).set({ status }).where(eq(reviews.id, id));
@@ -229,6 +243,7 @@ export async function setReviewStatusAction(id: number, status: string) {
 }
 
 export async function saveReviewReplyAction(id: number, reply: string): Promise<Result> {
+  await requireUser();
   await ensureDb();
   const clean = String(reply ?? "").trim().slice(0, 2000);
   if (!clean) return { ok: false, message: "Write the reply first." };
@@ -249,6 +264,7 @@ Rules:
 
 /** Drafts a reply with the connected model. The draft is only shown in the editor: a person edits, saves and posts it. */
 export async function draftReviewReplyAction(id: number): Promise<{ ok: boolean; text?: string; error?: string }> {
+  await requireUser();
   await ensureDb();
   const provider = await getAiProvider();
   if (!provider) return { ok: false, error: "No AI key is connected. Add one in Settings & AI Key." };
@@ -271,12 +287,14 @@ export async function draftReviewReplyAction(id: number): Promise<{ ok: boolean;
 }
 
 export async function deleteReviewAction(id: number) {
+  await requireUser();
   await ensureDb();
   await db.delete(reviews).where(eq(reviews.id, id));
   refresh();
 }
 
 export async function saveHealthAction(_prev: GrowthState, fd: FormData): Promise<GrowthState> {
+  await requireUser();
   await ensureDb();
   const client = await clientOf(fd);
   if (!client) return { error: "Choose a client." };
@@ -296,6 +314,7 @@ export async function saveHealthAction(_prev: GrowthState, fd: FormData): Promis
 // -------------------------------------------------------------------- leads
 
 export async function createLeadAction(_prev: GrowthState, fd: FormData): Promise<GrowthState> {
+  await requireUser();
   await ensureDb();
   const name = text(fd, "name", 120);
   const phone = text(fd, "phone", 30);
@@ -319,6 +338,7 @@ export async function createLeadAction(_prev: GrowthState, fd: FormData): Promis
 }
 
 export async function setLeadStatusAction(id: number, status: string) {
+  await requireUser();
   await ensureDb();
   if (!(LEAD_STATUSES as readonly string[]).includes(status)) return;
   await db.update(leads).set({ status }).where(eq(leads.id, id));
@@ -326,6 +346,7 @@ export async function setLeadStatusAction(id: number, status: string) {
 }
 
 export async function askCommerceAssistantAction(question: string): Promise<{ ok: boolean; answer?: string; error?: string }> {
+  await requireUser();
   await ensureDb();
   const prompt = String(question ?? "").trim().slice(0, 1200);
   if (!prompt) return { ok: false, error: "اكتبي سؤالك الأول." };
@@ -361,6 +382,7 @@ const PLATFORM_MARKET: Record<string, string> = { Amazon: "amazon", Noon: "noon"
 
 /** Turns a lead into a client on the chosen plan, with the plan's real fee, sales share and product limit. */
 export async function convertLeadAction(id: number, planId: string): Promise<Result> {
+  await requireUser();
   await ensureDb();
   const [lead] = await db.select().from(leads).where(eq(leads.id, id));
   if (!lead) return { ok: false, message: "Lead not found." };
@@ -387,6 +409,7 @@ export async function convertLeadAction(id: number, planId: string): Promise<Res
 }
 
 export async function deleteLeadAction(id: number) {
+  await requireUser();
   await ensureDb();
   await db.delete(leads).where(eq(leads.id, id));
   refresh();
