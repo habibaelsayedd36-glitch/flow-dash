@@ -20,10 +20,11 @@ type Item = {
   error: string | null;
 };
 
-export function JobRunner({ jobId, items, hasClient, clientName, imported }: { jobId: number; items: Item[]; hasClient: boolean; clientName: string | null; imported: boolean }) {
+export function JobRunner({ jobId, items, hasClient, clientName, imported, status }: { jobId: number; items: Item[]; hasClient: boolean; clientName: string | null; imported: boolean; status: string }) {
   const router = useRouter();
   const pending = items.filter((i) => i.status === "pending");
   const [processed, setProcessed] = useState(0);
+  const pendingKey = pending.map((item) => item.index).join(",");
   const [includeEstimates, setIncludeEstimates] = useState(false);
   const [busy, setBusy] = useState<"" | "import" | number>("");
   const [notice, setNotice] = useState("");
@@ -31,7 +32,7 @@ export function JobRunner({ jobId, items, hasClient, clientName, imported }: { j
 
   // Rows are written one request at a time (two in parallel), so a reload simply resumes the job.
   useEffect(() => {
-    if (pending.length === 0 || started.current) return;
+    if (status !== "running" || pending.length === 0 || started.current) return;
     started.current = true;
     const queue = pending.map((i) => i.index);
     let cancelled = false;
@@ -40,7 +41,8 @@ export function JobRunner({ jobId, items, hasClient, clientName, imported }: { j
         const index = queue.shift();
         if (index === undefined) return;
         try {
-          await processJobItemAction(jobId, index);
+          const result = await processJobItemAction(jobId, index);
+          if (result.pause) cancelled = true;
         } catch {
           // left pending: it is retried on the next load
         }
@@ -48,7 +50,12 @@ export function JobRunner({ jobId, items, hasClient, clientName, imported }: { j
       }
     };
     Promise.all([worker(), worker()]).then(async () => {
-      if (cancelled) return;
+      if (cancelled) {
+        await pauseJobAction(jobId);
+        router.refresh();
+        return;
+      }
+      started.current = false;
       await finishJobAction(jobId);
       router.refresh();
     });
@@ -56,10 +63,11 @@ export function JobRunner({ jobId, items, hasClient, clientName, imported }: { j
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [status, pendingKey]);
 
-  const running = pending.length > 0;
-  const done = items.filter((i) => i.status === "done");\n  const failed = items.filter((i) => i.status === "failed");
+  const running = status === "running" && pending.length > 0;
+  const done = items.filter((i) => i.status === "done");
+  const failed = items.filter((i) => i.status === "failed");
   const flagged = items.filter((i) => i.flags.length > 0).length;
   const estimates = items.filter((i) => i.hasEstimates).length;
   const scores = done.map((i) => i.score ?? 0);
@@ -73,7 +81,13 @@ export function JobRunner({ jobId, items, hasClient, clientName, imported }: { j
     setBusy("");
     router.refresh();
   };
-  const retryFailed = async () => {\n    setBusy("import");\n    await retryFailedJobItemsAction(jobId);\n    setBusy("");\n    router.refresh();\n  };\n  const addToPipeline = async () => {
+  const retryFailed = async () => {
+    setBusy("import");
+    await retryFailedJobItemsAction(jobId);
+    setBusy("");
+    router.refresh();
+  };
+  const addToPipeline = async () => {
     setBusy("import");
     const res = await importJobAction(jobId);
     setBusy("");
@@ -116,7 +130,8 @@ export function JobRunner({ jobId, items, hasClient, clientName, imported }: { j
       </section>
 
       <section className="card p-5 sm:p-6" aria-labelledby="downloads">
-        <h2 id="downloads" className="h-section">Downloads</h2>\n        {failed.length > 0 && <p className="mt-2 text-sm text-danger">{failed.length} rows were not generated. Progress is saved; retry after the provider quota resets or service recovers.</p>}
+        <h2 id="downloads" className="h-section">Downloads</h2>
+        {failed.length > 0 && <p className="mt-2 text-sm text-danger">{failed.length} rows were not generated. Progress is saved. Resume after the provider quota resets or service recovers.</p>}
         <div className="mt-4 flex flex-wrap gap-2">
           <a href={`/api/jobs/${jobId}/download?file=collecting`} className="btn btn-primary">
             <FileSpreadsheet size={16} aria-hidden />
@@ -130,7 +145,8 @@ export function JobRunner({ jobId, items, hasClient, clientName, imported }: { j
             <Download size={16} aria-hidden />
             Amazon flat file · Arabic
           </a>
-          {failed.length > 0 && <button type="button" className="btn btn-primary" onClick={retryFailed} disabled={busy !== ""}>Retry {failed.length} failed rows</button>}\n          {hasClient && (
+          {(failed.length > 0 || status === "paused") && <button type="button" className="btn btn-primary" onClick={retryFailed} disabled={busy !== ""}>{status === "paused" ? "Resume saved batch" : `Retry ${failed.length} failed rows`}</button>}
+          {hasClient && (
             <button type="button" className="btn btn-ghost" onClick={addToPipeline} disabled={imported || busy !== ""}>
               {busy === "import" ? <Loader2 size={16} className="animate-spin" aria-hidden /> : imported ? <Check size={16} aria-hidden /> : <PackagePlus size={16} aria-hidden />}
               {imported ? "Added to pipeline" : "Add to pipeline"}

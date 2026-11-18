@@ -118,7 +118,7 @@ async function recount(jobId: number) {
     .where(eq(jobs.id, jobId));
 }
 
-export async function processJobItemAction(jobId: number, index: number): Promise<{ ok: boolean }> {
+export async function processJobItemAction(jobId: number, index: number): Promise<{ ok: boolean; pause?: boolean }> {
   await ensureDb();
   const [job] = await db.select().from(jobs).where(eq(jobs.id, jobId));
   const item = job?.items[index];
@@ -154,7 +154,7 @@ export async function processJobItemAction(jobId: number, index: number): Promis
   const provider = await getAiProvider();
   if (!provider) {
     await writeItem(jobId, index, { source: s, status: "failed", error: "No AI provider is connected. Connect the existing provider in Settings, then retry this row." });
-    return { ok: false };
+    return { ok: false, pause: true };
   }
   try {
     const made = await generateJobItem(provider, brief, m, job.tone, known, unknown);
@@ -171,7 +171,8 @@ export async function processJobItemAction(jobId: number, index: number): Promis
   } catch (e) {
     const message = e instanceof Error ? e.message.slice(0, 500) : "AI request failed";
     await writeItem(jobId, index, { source: s, status: "failed", error: message });
-    return { ok: false };
+    const quota = /429|rate.?limit|quota|tokens per (minute|day)|tpm|tpd|too many requests/i.test(message);
+    return { ok: false, pause: quota };
   }
 }
 
@@ -180,11 +181,17 @@ export async function retryFailedJobItemsAction(jobId: number): Promise<{ ok: bo
   const [job] = await db.select().from(jobs).where(eq(jobs.id, jobId));
   if (!job || job.imported) return { ok: false, count: 0 };
   const items = job.items.map((item) => item.status === "failed" ? { source: item.source, status: "pending" as const } : item);
-  const count = items.filter((item, index) => item.status === "pending" && job.items[index]?.status === "failed").length;
+  const count = items.filter((item) => item.status === "pending").length;
   if (!count) return { ok: false, count: 0 };
   await db.update(jobs).set({ items, status: "running" }).where(eq(jobs.id, jobId));
   refresh();
   return { ok: true, count };
+}
+
+export async function pauseJobAction(jobId: number) {
+  await ensureDb();
+  await db.update(jobs).set({ status: "paused" }).where(eq(jobs.id, jobId));
+  refresh();
 }
 
 export async function finishJobAction(jobId: number) {

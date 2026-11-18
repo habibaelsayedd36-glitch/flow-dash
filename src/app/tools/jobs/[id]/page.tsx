@@ -38,6 +38,7 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
         hasClient={job.clientId !== null}
         clientName={clientName}
         imported={job.imported}
+        status={job.status}
         items={job.items.map((item, index) => ({
           index,
           sku: item.source.sku ?? "",
