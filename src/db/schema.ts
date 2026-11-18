@@ -199,6 +199,7 @@ export const statements = pgTable("statements", {
   extraRate: integer("extra_rate").notNull().default(0),
   total: integer("total").notNull().default(0),
   paid: boolean("paid").notNull().default(false),
+  paidAt: timestamp("paid_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
