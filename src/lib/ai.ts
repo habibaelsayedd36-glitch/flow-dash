@@ -574,7 +574,7 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
       if (results.length >= 8) break;
     }
   }
-  // RVRS product names are listed together in this verified brand catalogue.
+  // RVRS product names are listed together in this third-party brand catalogue.
   // General search often ranks unrelated sneaker-care pages above this catalogue,
   // so add it explicitly and prioritize it for RVRS rows. The catalogue confirms
   // product identity and the wording/pack size only; it does not substantiate
@@ -694,7 +694,7 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
       const wanted = normalizeResearchMatchText(brief.name).split(/\s+/).filter((token) => token.length > 2);
       const matchingLines = item.page.split(/\r?\n/).filter((line) => {
         const normalized = normalizeResearchMatchText(line);
-        return wanted.length > 0 && wanted.some((token) => normalized.includes(token));
+        return wanted.length > 0 && wanted.every((token) => normalized.includes(token));
       });
       return "[Catalogue identity check only — confirms the listed product name/category/pack size, not product features or performance claims] " +
         item.url + "\n" + matchingLines.join("\n");
