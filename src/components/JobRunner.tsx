@@ -29,15 +29,18 @@ export function JobRunner({ jobId, items, hasClient, clientName, imported, statu
   const [busy, setBusy] = useState<"" | "import" | number>("");
   const [notice, setNotice] = useState("");
   const started = useRef(false);
+  const pauseRequested = useRef(false);
+  const [pausing, setPausing] = useState(false);
 
   // Rows are written one request at a time (two in parallel), so a reload simply resumes the job.
   useEffect(() => {
     if (status !== "running" || pending.length === 0 || started.current) return;
     started.current = true;
+    pauseRequested.current = false;
     const queue = pending.map((i) => i.index);
     let cancelled = false;
     const worker = async () => {
-      while (!cancelled && queue.length > 0) {
+      while (!cancelled && !pauseRequested.current && queue.length > 0) {
         const index = queue.shift();
         if (index === undefined) return;
         try {
@@ -50,7 +53,7 @@ export function JobRunner({ jobId, items, hasClient, clientName, imported, statu
       }
     };
     Promise.all([worker(), worker()]).then(async () => {
-      if (cancelled) {
+      if (cancelled || pauseRequested.current) {
         started.current = false;
         await pauseJobAction(jobId);
         router.refresh();
@@ -110,7 +113,7 @@ export function JobRunner({ jobId, items, hasClient, clientName, imported, statu
         </div>
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-mute">Progress is saved after every product. You can pause and resume this batch at any time.</p>
-          <button type="button" className="btn btn-ghost" onClick={async () => { await pauseJobAction(jobId); router.refresh(); }}>Pause batch</button>
+          <button type="button" className="btn btn-ghost" disabled={pausing} onClick={async () => { pauseRequested.current = true; setPausing(true); await pauseJobAction(jobId); router.refresh(); }}>{pausing ? "Pausing…" : "Pause batch"}</button>
         </div>
       </section>
     );
