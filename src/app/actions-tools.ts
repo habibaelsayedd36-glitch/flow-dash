@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { ensureDb } from "@/db/ensure";
-import { clients, jobs, listings, products, settings, statements, tasks, type JobItem } from "@/db/schema";
+import { adCampaigns, automationRuns, automations, clients, healthChecks, jobs, keywords, leads, listings, orders, products, reviews, settings, statements, tasks, type JobItem } from "@/db/schema";
 import { SPEC_KEYS, generateJobItem, getAiProvider, isProviderId, testProvider, type SpecKey } from "@/lib/ai";
 import { PLANS, TONES, isMarketplace, type PlanId } from "@/lib/catalog";
 import { checkQuota, emit } from "@/lib/engine";
@@ -362,4 +362,45 @@ export async function deleteStatementAction(id: number) {
   await ensureDb();
   await db.delete(statements).where(eq(statements.id, id));
   refresh();
+}
+
+
+/** Permanently remove a client and all client-owned records. */
+export async function deleteClientAction(clientId: number): Promise<{ ok: boolean }> {
+  await requireUser();
+  await ensureDb();
+  const id = clamp(clientId, 1, 2_000_000_000, 0);
+  if (!id) return { ok: false };
+  await db.delete(statements).where(eq(statements.clientId, id));
+  await db.delete(orders).where(eq(orders.clientId, id));
+  await db.delete(keywords).where(eq(keywords.clientId, id));
+  await db.delete(adCampaigns).where(eq(adCampaigns.clientId, id));
+  await db.delete(reviews).where(eq(reviews.clientId, id));
+  await db.delete(healthChecks).where(eq(healthChecks.clientId, id));
+  await db.delete(leads).where(eq(leads.clientId, id));
+  await db.delete(clients).where(eq(clients.id, id));
+  refresh();
+  return { ok: true };
+}
+
+/** Clear operational data while preserving login accounts and system settings. */
+export async function deleteAllOperationalDataAction(): Promise<{ ok: boolean }> {
+  await requireUser();
+  await ensureDb();
+  await db.delete(statements);
+  await db.delete(orders);
+  await db.delete(reviews);
+  await db.delete(healthChecks);
+  await db.delete(keywords);
+  await db.delete(adCampaigns);
+  await db.delete(leads);
+  await db.delete(tasks);
+  await db.delete(listings);
+  await db.delete(products);
+  await db.delete(jobs);
+  await db.delete(automationRuns);
+  await db.delete(automations);
+  await db.delete(clients);
+  refresh();
+  return { ok: true };
 }
