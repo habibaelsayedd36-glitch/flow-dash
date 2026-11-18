@@ -1,14 +1,13 @@
-import { and, asc, count, eq, ilike, or } from "drizzle-orm";
+import { and, asc, count, eq, ilike, or, type SQL } from "drizzle-orm";
 import { Boxes, Plus, Search } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Empty, MarketBadge, PageHeader, StatCard } from "@/components/ui";
 import { db } from "@/db";
 import { ensureDb } from "@/db/ensure";
 import { clients, listings, products } from "@/db/schema";
-import { MARKETPLACES, STAGES } from "@/lib/catalog";
-import { label } from "@/lib/i18n";
+import { MARKETPLACES } from "@/lib/catalog";
 import { getI18n } from "@/lib/locale";
-import { Empty, MarketBadge, PageHeader, StatCard, Td } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Product Catalog" };
@@ -34,11 +33,10 @@ export default async function ProductsPage({
   const clientId = Number(sp.client) || undefined;
   const marketplace = MARKETPLACES.includes(sp.marketplace as (typeof MARKETPLACES)[number]) ? sp.marketplace : undefined;
 
-  const filters = [
-    clientId ? eq(products.clientId, clientId) : undefined,
-    marketplace ? eq(products.marketplace, marketplace) : undefined,
-    q ? or(ilike(products.name, `%${q}%`), ilike(products.brand, `%${q}%`), ilike(products.sku, `%${q}%`)) : undefined,
-  ].filter(Boolean);
+  const filters: SQL[] = [];
+  if (clientId) filters.push(eq(products.clientId, clientId));
+  if (marketplace) filters.push(eq(products.marketplace, marketplace));
+  if (q) filters.push(or(ilike(products.name, `%${q}%`), ilike(products.brand, `%${q}%`), ilike(products.sku, `%${q}%`))!);
 
   const [rows, clientsList, totals] = await Promise.all([
     db.select({
@@ -64,10 +62,6 @@ export default async function ProductsPage({
     db.select({ total: count() }).from(products),
   ]);
 
-  const stageCounts = STAGES.map((stage) => ({
-    stage,
-    n: rows.filter((row) => row.stage === stage).length,
-  }));
   const total = totals[0]?.total ?? 0;
 
   return (
