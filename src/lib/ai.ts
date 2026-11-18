@@ -473,8 +473,8 @@ function isRelevantResearchPage(
   const overlap = productTokens.length ? matchedProductTokens.length / productTokens.length : 0;
   const normalizedPage = normalizeResearchMatchText([item.title, item.snippet ?? "", item.page].join(" "));
   const normalizedName = normalizeResearchMatchText(brief.name)
-    .replace(/\\b\\d+(?:[.,]\\d+)?\\s*(?:ml|mg|g|kg|oz|pcs|pieces?)\\b/g, " ")
-    .replace(/\\s+/g, " ").trim();
+    .replace(/\b\d+(?:[.,]\d+)?\s*(?:ml|mg|g|kg|oz|pcs|pieces?)\b/g, " ")
+    .replace(/\s+/g, " ").trim();
   const exactNameMatch = normalizedName.length >= 8 && normalizedPage.includes(normalizedName);
   const matchedBrandTokens = brandTokens.filter((token) => searchable.has(token)).length;
   const brandOverlap = brandTokens.length ? matchedBrandTokens.length / brandTokens.length : 1;
@@ -495,9 +495,9 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
     .replace(/\bhyadrate\b/gi, "hydrate")
     .replace(/\bhydrate cream\b/gi, "hydra gel cream");
   const cleanSearchName = normalizedName
-    .replace(/[|,()[\\]{}]/g, " ")
-    .replace(/\\b\\d+(?:[.,]\\d+)?\\s*(?:ml|mg|g|kg|oz|pcs|pieces?)\\b/gi, " ")
-    .replace(/\\s+/g, " ").trim();
+    .replace(/[|,()[\]{}]/g, " ")
+    .replace(/\b\d+(?:[.,]\d+)?\s*(?:ml|mg|g|kg|oz|pcs|pieces?)\b/gi, " ")
+    .replace(/\s+/g, " ").trim();
   const queries = Array.from(new Set([
     [brandHint, '"' + brief.name + '"', "product"].filter(Boolean).join(" "),
     '"' + brief.name + '"',
