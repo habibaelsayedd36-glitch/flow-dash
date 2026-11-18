@@ -304,8 +304,15 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
       { authorization: `Bearer ${p.key}` },
       {
         model: p.model,
-        // Keep Groq's requested token reservation below the free-tier TPM ceiling.
-        ...(p.id === "groq" ? { max_completion_tokens: 1800 } : {}),
+        // GPT-OSS spends completion tokens on hidden reasoning before visible copy.
+        // A larger budget plus low reasoning effort prevents empty replies caused by
+        // exhausting the 1,800-token cap before the listing JSON is emitted.
+        ...(p.id === "groq"
+          ? {
+              max_completion_tokens: p.model.includes("gpt-oss") ? 4096 : 1800,
+              ...(p.model.includes("gpt-oss") ? { reasoning_effort: "low" } : {}),
+            }
+          : {}),
         messages: [
           { role: "system", content: system },
           { role: "user", content: user },
@@ -316,7 +323,16 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
       },
       p.label,
     )) as { choices?: { message?: { content?: string } }[] };
-    text = data.choices?.[0]?.message?.content ?? "";
+    const choice = data.choices?.[0];
+    text = choice?.message?.content ?? "";
+    if (!text.trim() && p.id === "groq") {
+      const finish = choice?.finish_reason ?? "unknown";
+      const used = (data as { usage?: { completion_tokens?: number; completion_tokens_details?: { reasoning_tokens?: number } } }).usage;
+      const reasoning = used?.completion_tokens_details?.reasoning_tokens;
+      if (finish === "length") {
+        throw new Error(`${p.label}: response budget was consumed before visible text was generated (reasoning tokens: ${reasoning ?? "unknown"}). Retry generation; GPT-OSS now uses a larger output budget and low reasoning effort.`);
+      }
+    }
   } else {
     const requestGemini = (model: string) => post(
       `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
