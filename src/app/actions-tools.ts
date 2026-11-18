@@ -129,7 +129,11 @@ async function recount(jobId: number) {
   const pending = job.items.some((i) => i.status === "pending");
   await db
     .update(jobs)
-    .set({ flagged: job.items.filter(isFlagged).length, status: pending ? "running" : "done" })
+    .set({
+      flagged: job.items.filter(isFlagged).length,
+      // A worker finishing after the user pauses must not silently resume the batch.
+      status: sql`CASE WHEN ${jobs.status} = 'paused' THEN 'paused' WHEN ${pending} THEN 'running' ELSE 'done' END`,
+    })
     .where(eq(jobs.id, jobId));
 }
 
@@ -139,7 +143,7 @@ export async function processJobItemAction(jobId: number, index: number): Promis
   const [job] = await db.select().from(jobs).where(eq(jobs.id, jobId));
   const item = job?.items[index];
   if (!job || !item) return { ok: false };
-  if (item.status !== "pending") return { ok: true };
+  if (job.status !== "running" || item.status !== "pending") return { ok: true };
 
   const m = isMarketplace(job.marketplace) ? job.marketplace : "amazon";
   const s = item.source;
