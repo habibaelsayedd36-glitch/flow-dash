@@ -430,20 +430,20 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
       searchWasAvailable = true;
       const searchText = await response.text();
       if (/format=rss/i.test(searchUrl)) {
-        const items = searchText.match(/<item\\b[\\s\\S]*?<\\/item>/gi) ?? [];
+        const items = searchText.match(/<item\b[\s\S]*?<\/item>/gi) ?? [];
         for (const item of items) {
           const getTag = (tag: string) => item.match(new RegExp("<" + tag + "[^>]*>([\\s\\S]*?)<\\/" + tag + ">", "i"))?.[1] ?? "";
-          const rawUrl = decodeResearchHtml(getTag("link").replace(/<!\\[CDATA\\[|\\]\\]>/g, "").trim());
+          const rawUrl = decodeResearchHtml(getTag("link").replace(/<!\[CDATA\[|\]\]>/g, "").trim());
           try {
             const parsed = new URL(rawUrl);
-            if (!["http:", "https:"].includes(parsed.protocol) || /youtube\\.com|youtu\\.be|facebook\\.com|instagram\\.com|tiktok\\.com|pinterest\\./i.test(parsed.hostname)) continue;
-            const title = decodeResearchHtml(getTag("title").replace(/<!\\[CDATA\\[|\\]\\]>/g, "").replace(/<[^>]+>/g, " ").trim());
-            const snippet = decodeResearchHtml(getTag("description").replace(/<!\\[CDATA\\[|\\]\\]>/g, "").replace(/<[^>]+>/g, " ").trim());
+            if (!["http:", "https:"].includes(parsed.protocol) || /youtube\.com|youtu\.be|facebook\.com|instagram\.com|tiktok\.com|pinterest\./i.test(parsed.hostname)) continue;
+            const title = decodeResearchHtml(getTag("title").replace(/<!\[CDATA\[|\]\]>/g, "").replace(/<[^>]+>/g, " ").trim());
+            const snippet = decodeResearchHtml(getTag("description").replace(/<!\[CDATA\[|\]\]>/g, "").replace(/<[^>]+>/g, " ").trim());
             if (title && !results.some((entry) => entry.url === parsed.href)) results.push({ url: parsed.href, title, snippet });
           } catch { /* ignore malformed search results */ }
         }
       } else {
-        const blocks = searchText.split(/class=["']result(?:\\s|")/i).slice(1, 9);
+        const blocks = searchText.split(/class=["']result(?:\s|")/i).slice(1, 9);
         for (const block of blocks) {
           const anchor = block.match(/<a[^>]*class=["'][^"']*result__a[^"']*["'][^>]*href=["']([^"']+)["'][^>]*>([\\s\\S]*?)<\\/a>/i);
           if (!anchor) continue;
@@ -453,10 +453,10 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
             const parsed = new URL(href);
             const target = parsed.searchParams.get("uddg") || href;
             const targetUrl = new URL(target);
-            if (!["http:", "https:"].includes(targetUrl.protocol) || /youtube\\.com|youtu\\.be|facebook\\.com|instagram\\.com|tiktok\\.com|pinterest\\./i.test(targetUrl.hostname)) continue;
-            const title = decodeResearchHtml(anchor[2].replace(/<[^>]+>/g, " ")).replace(/\\s+/g, " ").trim();
+            if (!["http:", "https:"].includes(targetUrl.protocol) || /youtube\.com|youtu\.be|facebook\.com|instagram\.com|tiktok\.com|pinterest\./i.test(targetUrl.hostname)) continue;
+            const title = decodeResearchHtml(anchor[2].replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
             const snippetMatch = block.match(/class=["'][^"']*result__snippet[^"']*["'][^>]*>([\\s\\S]*?)<\\/(?:a|td|div)>/i);
-            const snippet = snippetMatch ? decodeResearchHtml(snippetMatch[1].replace(/<[^>]+>/g, " ")).replace(/\\s+/g, " ").trim() : "";
+            const snippet = snippetMatch ? decodeResearchHtml(snippetMatch[1].replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim() : "";
             if (title && !results.some((entry) => entry.url === targetUrl.href)) results.push({ url: targetUrl.href, title, snippet });
           } catch { /* ignore malformed search results */ }
         }
