@@ -70,7 +70,7 @@ TITLE:
 BULLETS:
 - Return exactly 5 distinct bullets in each language.
 - EVERY English and Arabic bullet MUST contain at least 76 characters (including spaces), and must never exceed the selected marketplace's maximum.
-- Aim for 100–180 meaningful characters when the available product facts support it; never add filler just to reach 75 characters.
+- Aim for 100–180 meaningful characters when facts support it. When facts are limited, explain only the known product type, stated size/count, or explicit use in distinct ways; never invent claims or pad with meaningless filler.
 - Each bullet must communicate one meaningful feature AND its practical customer benefit. Use different purchase considerations across the five bullets; do not repeat the same idea.
 - Prioritize: core function/use, important confirmed specification, convenience or design, compatibility/fit/use context, and another genuine differentiator — only where supported by the brief.
 - Write complete, informative sentences or phrases. Avoid empty claims such as "High Quality", "Perfect Choice", "Great Design", "Easy to Use" unless the brief explains what makes them true.
