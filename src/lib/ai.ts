@@ -536,12 +536,12 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
   // per-site HTML parsing and keeps product facts grounded in the page content.
   const htmlToResearchText = (html: string) => decodeResearchHtml(
     html
-      .replace(/<(script|style|noscript|svg|header|footer|nav)\\b[\\s\\S]*?<\\/\\1>/gi, " ")
-      .replace(/<\\/(p|div|li|h[1-6]|section|br|tr)>/gi, "\\n")
+      .replace(/<(script|style|noscript|svg|header|footer|nav)\b[\s\S]*?<\/\1>/gi, " ")
+      .replace(/<\/(p|div|li|h[1-6]|section|br|tr)>/gi, "\n")
       .replace(/<[^>]+>/g, " ")
-      .replace(/[ \\t]+/g, " ")
-      .replace(/\\n[ \\t]+/g, "\\n")
-      .replace(/\\n{3,}/g, "\\n\\n")
+      .replace(/[ \t]+/g, " ")
+      .replace(/\n[ \t]+/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
       .trim()
   );
   const pages = await Promise.all(results.slice(0, 3).map(async (result) => {
