@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { startListingJobAction } from "@/app/actions-tools";
 import { MARKETPLACES, MARKETPLACE_META, TONES } from "@/lib/catalog";
-import { FIELDS, type FieldKey, type Mapping } from "@/lib/job-fields";
+import { FIELDS, type FieldKey, type Mapping } from "@/lib/job-fields";\n\nconst IMPORT_FIELDS = FIELDS.filter((field) => field.key === "name" || field.key === "brand");
 
 type Parsed = { jobId: number; headers: string[]; preview: string[][]; total: number; truncated: boolean; mapping: Mapping; fileName: string };
 const TONE_LABEL: Record<string, string> = { clear: "Clear and factual", premium: "Premium", friendly: "Friendly" };
@@ -14,15 +14,15 @@ export function ListingJobWizard({ clients }: { clients: { id: number; name: str
   const router = useRouter();
   const [parsed, setParsed] = useState<Parsed | null>(null);
   const [mapping, setMapping] = useState<Mapping>({});
-  const [busy, setBusy] = useState<"" | "upload" | "template" | "start">("");
+  const [busy, setBusy] = useState<"" | "upload" | "start">("");
   const [error, setError] = useState("");
   const [templateInfo, setTemplateInfo] = useState("");
-  const [opts, setOpts] = useState({ clientId: clients[0] ? String(clients[0].id) : "", marketplace: "amazon", productType: "", tone: "clear" });
+  const [opts, setOpts] = useState({ clientId: clients[0] ? String(clients[0].id) : "", marketplace: "amazon" });
 
-  const upload = async (file: File | undefined, kind: "sheet" | "template") => {
+  const upload = async (file: File | undefined) => {
     if (!file) return;
     setError("");
-    setBusy(kind === "sheet" ? "upload" : "template");
+    setBusy("upload");
     const body = new FormData();
     body.set("file", file);
     body.set("kind", kind);
@@ -43,10 +43,10 @@ export function ListingJobWizard({ clients }: { clients: { id: number; name: str
 
   const start = async () => {
     if (!parsed) return;
-    if (mapping.name === undefined && mapping.nameAr === undefined) return setError("Map a product name column before starting.");
+    if (mapping.name === undefined) return setError("Choose the English product-name column.");\n    if (mapping.brand === undefined) return setError("Choose the brand column.");\n    if (!opts.clientId) return setError("Choose the client for this batch.");
     setError("");
     setBusy("start");
-    const res = await startListingJobAction(parsed.jobId, { clientId: opts.clientId ? Number(opts.clientId) : null, marketplace: opts.marketplace, productType: opts.productType, tone: opts.tone, mapping });
+    const res = await startListingJobAction(parsed.jobId, { clientId: opts.clientId ? Number(opts.clientId) : null, marketplace: opts.marketplace, productType: "", tone: "clear", mapping });
     if (res.ok) router.push(`/tools/jobs/${parsed.jobId}`);
     else {
       setError(res.error ?? "The job could not start.");
@@ -58,14 +58,14 @@ export function ListingJobWizard({ clients }: { clients: { id: number; name: str
     return (
       <section className="card p-6 sm:p-8" aria-labelledby="up">
         <h2 id="up" className="h-section">1. Upload the receiving sheet</h2>
-        <p className="mt-1 text-sm text-mute">Excel (.xlsx) or CSV, first row as column headers, one product per row. Up to 300 rows per job.</p>
+        <p className="mt-1 text-sm text-mute">Excel (.xlsx) or CSV, first row as column headers, one product per row. Up to 1,000 products per batch. Use only two columns: Product Name (English) and Brand.</p>
         <label className="mt-5 flex cursor-pointer flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-input bg-sage-soft px-6 py-12 text-center transition-colors hover:border-moss focus-within:border-moss">
           <span className="grid size-12 place-items-center rounded-full bg-white text-moss">
             {busy === "upload" ? <Loader2 size={22} className="animate-spin" aria-hidden /> : <Upload size={22} aria-hidden />}
           </span>
           <span className="font-display text-base font-medium text-ink">{busy === "upload" ? "Reading the sheet…" : "Choose a file"}</span>
           <span className="text-[13px] text-mute">.xlsx, .csv or tab-delimited .txt, up to 8 MB</span>
-          <input type="file" accept=".xlsx,.xlsm,.csv,.txt,.tsv" className="sr-only" disabled={busy !== ""} onChange={(e) => upload(e.target.files?.[0], "sheet")} />
+          <input type="file" accept=".xlsx,.xlsm,.csv,.txt,.tsv" className="sr-only" disabled={busy !== ""} onChange={(e) => upload(e.target.files?.[0])} />
         </label>
         {error && <p role="alert" className="mt-3 text-sm text-danger">{error}</p>}
         <a href="/samples/receiving-sheet-sample.csv" download className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-flow-green hover:underline">
@@ -92,7 +92,7 @@ export function ListingJobWizard({ clients }: { clients: { id: number; name: str
         {parsed.truncated && <p className="mt-3 rounded-xl bg-amber-soft px-4 py-2.5 text-sm text-amber-ink">Only the first 300 rows were loaded. Split larger sheets into separate jobs.</p>}
 
         <ul className="mt-5 grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
-          {FIELDS.map((f) => {
+          {IMPORT_FIELDS.map((f) => {
             const col = mapping[f.key as FieldKey];
             const example = col !== undefined ? parsed.preview.map((r) => r[col]).find(Boolean) : undefined;
             return (
@@ -109,7 +109,7 @@ export function ListingJobWizard({ clients }: { clients: { id: number; name: str
                     <option key={i} value={i}>{h}</option>
                   ))}
                 </select>
-                <p className="mt-1 truncate text-xs text-mute" dir="auto">{example ? `e.g. ${example}` : col === undefined ? "Will be flagged as missing or estimated" : "No value in the first rows"}</p>
+                <p className="mt-1 truncate text-xs text-mute" dir="auto">{example ? `e.g. ${example}` : col === undefined ? "Required column — choose the matching header" : "No value in the first rows"}</p>
               </li>
             );
           })}
@@ -118,7 +118,7 @@ export function ListingJobWizard({ clients }: { clients: { id: number; name: str
 
       <section className="card p-5 sm:p-6" aria-labelledby="opts">
         <h2 id="opts" className="h-section">3. Job settings</h2>
-        <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-2">
           <div>
             <label className="label" htmlFor="lj-client">Client</label>
             <select id="lj-client" className="field" value={opts.clientId} onChange={(e) => setOpts({ ...opts, clientId: e.target.value })}>
@@ -168,7 +168,7 @@ export function ListingJobWizard({ clients }: { clients: { id: number; name: str
             {busy === "start" ? <Loader2 size={16} className="animate-spin" aria-hidden /> : <Play size={15} aria-hidden />}
             Start job
           </button>
-          <button type="button" className="btn btn-ghost" onClick={() => { setParsed(null); setTemplateInfo(""); setError(""); }} disabled={busy !== ""}>
+          <button type="button" className="btn btn-ghost" onClick={() => { setParsed(null); setError(""); }} disabled={busy !== ""}>
             Use a different sheet
           </button>
         </div>

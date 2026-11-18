@@ -10,7 +10,7 @@ import { SPEC_KEYS, generateJobItem, getAiProvider, isProviderId, testProvider, 
 import { PLANS, TONES, isMarketplace, type PlanId } from "@/lib/catalog";
 import { checkQuota, emit } from "@/lib/engine";
 import { FIELDS, isFlagged, type Mapping } from "@/lib/job-fields";
-import { buildTemplateListing, scoreListing, type ProductBrief } from "@/lib/rules";
+import { scoreListing, type ProductBrief } from "@/lib/rules";
 
 const refresh = () => revalidatePath("/", "layout");
 const clamp = (v: unknown, min: number, max: number, fallback: number) => {
@@ -143,7 +143,7 @@ export async function processJobItemAction(jobId: number, index: number): Promis
     name: s.name || s.nameAr || "",
     nameAr: s.nameAr ?? "",
     brand: s.brand ?? "",
-    category: job.productType || "general",
+    category: "auto",
     // Include every mapped fact and both language feature fields in the AI brief.
     features: [...featureLines, ...confirmedSpecLines].join("\n"),
     featuresAr: (s.featuresAr ?? "").split(/[;|\n\u2022]+/).map((x) => x.trim()).filter(Boolean).join("\n"),
@@ -151,28 +151,40 @@ export async function processJobItemAction(jobId: number, index: number): Promis
   };
   const unknown = SPEC_KEYS.filter((k) => !known[k]);
 
-  const out: JobItem = { source: s, status: "done", engine: "template", specs: { ...known }, estimated: [], missing: [...unknown], notes: [] };
   const provider = await getAiProvider();
-  if (provider) {
-    try {
-      const made = await generateJobItem(provider, brief, m, job.tone, known, unknown);
-      out.content = made.content;
-      out.engine = "ai";
-      // Anything the sheet did not contain is, by definition, an estimate.
-      out.estimated = unknown.filter((k) => made.specs[k]);
-      out.missing = unknown.filter((k) => !made.specs[k]);
-      out.specs = { ...known, ...made.specs };
-    } catch (e) {
-      out.error = e instanceof Error ? e.message.slice(0, 240) : "AI request failed";
-    }
+  if (!provider) {
+    await writeItem(jobId, index, { source: s, status: "failed", error: "No AI provider is connected. Connect the existing provider in Settings, then retry this row." });
+    return { ok: false };
   }
-  if (!out.content) out.content = buildTemplateListing(brief, m);
-  if (!s.features) out.notes?.push("thin_brief");
-  if (!out.content.titleAr) out.notes?.push("no_arabic");
-  out.score = scoreListing(out.content, m, { brand: brief.brand, keywords: "" });
+  try {
+    const made = await generateJobItem(provider, brief, m, job.tone, known, unknown);
+    const out: JobItem = {
+      source: s, status: "done", engine: "ai", content: made.content,
+      estimated: unknown.filter((k) => made.specs[k]),
+      missing: unknown.filter((k) => !made.specs[k]),
+      specs: { ...known, ...made.specs }, notes: [],
+    };
+    if (!out.content.titleAr) out.notes?.push("no_arabic");
+    out.score = scoreListing(out.content, m, { brand: brief.brand, keywords: "" });
+    await writeItem(jobId, index, out);
+    return { ok: true };
+  } catch (e) {
+    const message = e instanceof Error ? e.message.slice(0, 500) : "AI request failed";
+    await writeItem(jobId, index, { source: s, status: "failed", error: message });
+    return { ok: false };
+  }
+}
 
-  await writeItem(jobId, index, out);
-  return { ok: true };
+export async function retryFailedJobItemsAction(jobId: number): Promise<{ ok: boolean; count: number }> {
+  await ensureDb();
+  const [job] = await db.select().from(jobs).where(eq(jobs.id, jobId));
+  if (!job || job.imported) return { ok: false, count: 0 };
+  const items = job.items.map((item) => item.status === "failed" ? { source: item.source, status: "pending" as const } : item);
+  const count = items.filter((item, index) => item.status === "pending" && job.items[index]?.status === "failed").length;
+  if (!count) return { ok: false, count: 0 };
+  await db.update(jobs).set({ items, status: "running" }).where(eq(jobs.id, jobId));
+  refresh();
+  return { ok: true, count };
 }
 
 export async function finishJobAction(jobId: number) {

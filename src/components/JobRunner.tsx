@@ -3,7 +3,7 @@
 import { Check, Download, FileSpreadsheet, Loader2, PackagePlus, TriangleAlert } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { finishJobAction, importJobAction, processJobItemAction, verifyJobItemAction } from "@/app/actions-tools";
+import { finishJobAction, importJobAction, processJobItemAction, retryFailedJobItemsAction, verifyJobItemAction } from "@/app/actions-tools";
 import { ScoreBadge } from "./ui";
 
 type Item = {
@@ -59,7 +59,7 @@ export function JobRunner({ jobId, items, hasClient, clientName, imported }: { j
   }, []);
 
   const running = pending.length > 0;
-  const done = items.filter((i) => i.status === "done");
+  const done = items.filter((i) => i.status === "done");\n  const failed = items.filter((i) => i.status === "failed");
   const flagged = items.filter((i) => i.flags.length > 0).length;
   const estimates = items.filter((i) => i.hasEstimates).length;
   const scores = done.map((i) => i.score ?? 0);
@@ -73,7 +73,7 @@ export function JobRunner({ jobId, items, hasClient, clientName, imported }: { j
     setBusy("");
     router.refresh();
   };
-  const addToPipeline = async () => {
+  const retryFailed = async () => {\n    setBusy("import");\n    await retryFailedJobItemsAction(jobId);\n    setBusy("");\n    router.refresh();\n  };\n  const addToPipeline = async () => {
     setBusy("import");
     const res = await importJobAction(jobId);
     setBusy("");
@@ -102,7 +102,7 @@ export function JobRunner({ jobId, items, hasClient, clientName, imported }: { j
     <div className="flex flex-col gap-4">
       <section className="grid grid-cols-2 gap-4 xl:grid-cols-4" aria-label="Job summary">
         {[
-          { label: "Listings written", value: done.length, hint: aiCount > 0 ? `${aiCount} by AI` : "Template engine" },
+          { label: "Listings written", value: done.length, hint: aiCount > 0 ? `${aiCount} by AI` : "AI generated" },
           { label: "Rows to check", value: flagged, hint: flagged === 0 ? "Nothing flagged" : "See the flags below" },
           { label: "Unverified estimates", value: estimates, hint: estimates === 0 ? "None" : "Left out of the flat file" },
           { label: "Average score", value: avg, hint: "Marketplace compliance" },
@@ -116,7 +116,7 @@ export function JobRunner({ jobId, items, hasClient, clientName, imported }: { j
       </section>
 
       <section className="card p-5 sm:p-6" aria-labelledby="downloads">
-        <h2 id="downloads" className="h-section">Downloads</h2>
+        <h2 id="downloads" className="h-section">Downloads</h2>\n        {failed.length > 0 && <p className="mt-2 text-sm text-danger">{failed.length} rows were not generated. Progress is saved; retry after the provider quota resets or service recovers.</p>}
         <div className="mt-4 flex flex-wrap gap-2">
           <a href={`/api/jobs/${jobId}/download?file=collecting`} className="btn btn-primary">
             <FileSpreadsheet size={16} aria-hidden />
@@ -130,7 +130,7 @@ export function JobRunner({ jobId, items, hasClient, clientName, imported }: { j
             <Download size={16} aria-hidden />
             Amazon flat file · Arabic
           </a>
-          {hasClient && (
+          {failed.length > 0 && <button type="button" className="btn btn-primary" onClick={retryFailed} disabled={busy !== ""}>Retry {failed.length} failed rows</button>}\n          {hasClient && (
             <button type="button" className="btn btn-ghost" onClick={addToPipeline} disabled={imported || busy !== ""}>
               {busy === "import" ? <Loader2 size={16} className="animate-spin" aria-hidden /> : imported ? <Check size={16} aria-hidden /> : <PackagePlus size={16} aria-hidden />}
               {imported ? "Added to pipeline" : "Add to pipeline"}
@@ -159,7 +159,7 @@ export function JobRunner({ jobId, items, hasClient, clientName, imported }: { j
             <li key={item.index} className="flex flex-col gap-3 px-5 py-4 sm:px-6 lg:flex-row lg:items-start lg:gap-6">
               <div className="min-w-0 lg:w-56 lg:shrink-0">
                 <p className="truncate text-sm font-medium text-ink" dir="auto">{item.name}</p>
-                <p className="mt-0.5 text-[13px] text-mute">{item.sku || "No SKU"} · {item.engine === "ai" ? "AI" : "Template engine"}</p>
+                <p className="mt-0.5 text-[13px] text-mute">{item.sku || "No SKU"} · {item.engine === "ai" ? "AI" : item.status === "failed" ? "Needs retry" : "Pending"}</p>
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-sm leading-snug text-ink">{item.title || "No title"}</p>
@@ -174,7 +174,7 @@ export function JobRunner({ jobId, items, hasClient, clientName, imported }: { j
                     ))}
                   </ul>
                 )}
-                {item.error && <p className="mt-2 text-[13px] text-danger">AI request failed, template engine used instead: {item.error}</p>}
+                {item.error && <p className="mt-2 text-[13px] text-danger">Not generated — {item.error}</p>}
               </div>
               <div className="flex shrink-0 items-center gap-2 lg:flex-col lg:items-end">
                 {item.score !== null && <ScoreBadge score={item.score} labelText="Score" />}

@@ -15,7 +15,7 @@ import {
 } from "@/db/schema";
 import { getAiProvider, generateWithAi } from "./ai";
 import { MARKETPLACE_META, isMarketplace, isStage, type Marketplace, type Trigger } from "./catalog";
-import { buildTemplateListing, scoreListing, type ListingContent, type ProductBrief } from "./rules";
+import { scoreListing, type ListingContent, type ProductBrief } from "./rules";
 
 /**
  * Automation engine. Server actions emit events; every enabled rule that
@@ -62,16 +62,15 @@ export async function produceListing(
   let engine: "ai" | "template" = "template";
   let aiError: string | null = null;
 
-  if (provider) {
-    try {
-      content = await generateWithAi(provider, brief, m, tone, aiNotes);
-      engine = "ai";
-    } catch (e) {
-      aiError = e instanceof Error ? e.message : "AI request failed";
-      content = buildTemplateListing(brief, m);
-    }
-  } else {
-    content = buildTemplateListing(brief, m);
+  if (!provider) {
+    throw new Error("No AI provider is connected. Connect the existing provider in Settings before generating a listing.");
+  }
+  try {
+    content = await generateWithAi(provider, brief, m, tone, aiNotes);
+    engine = "ai";
+  } catch (e) {
+    aiError = e instanceof Error ? e.message : "AI request failed";
+    throw new Error(aiError);
   }
 
   const score = scoreListing(content, m, brief);

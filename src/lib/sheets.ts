@@ -4,7 +4,7 @@ import { flagSummary } from "./job-fields";
 
 /** Server-only: reads receiving sheets and writes the collecting sheet + Amazon flat file. */
 
-export const MAX_ROWS = 300;
+export const MAX_ROWS = 1000;
 const MAX_COLS = 40;
 
 function parseDelimited(text: string): string[][] {
