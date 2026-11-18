@@ -6,6 +6,7 @@ export default auth.middleware({
     "/auth/sign-in",
     "/auth/forgot-password",
     "/auth/reset-password",
+    "/api/auth",
     "/share",
     "/api/leads",
     "/api/health",
