@@ -122,27 +122,28 @@ export async function moveProductAction(productId: number, stage: string): Promi
 // ----------------------------------------------------------------- listings
 
 export async function generateListingAction(_prev: FormState, fd: FormData): Promise<FormState> {
-  await ensureDb();
-  const productId = int(fd.get("productId"), 1, 2_000_000_000, 0);
-  const [product] = productId ? await db.select().from(products).where(eq(products.id, productId)) : [];
-  if (!product) return { error: "required" };
-
-  let target: string;
   try {
+    await ensureDb();
+    const productId = int(fd.get("productId"), 1, 2_000_000_000, 0);
+    const [product] = productId ? await db.select().from(products).where(eq(products.id, productId)) : [];
+    if (!product) return { error: "No product was selected or the product no longer exists." };
+
     const made = await produceListing(product, {
       marketplace: str(fd, "marketplace"),
       tone: oneOf(TONES, str(fd, "tone"), "clear"),
     });
     await emit("listing_generated", { productId: product.id, clientId: product.clientId, listingId: made.listingId, score: made.score });
-    target = `/listings/${made.listingId}${made.aiError ? `?ai_error=${encodeURIComponent(made.aiError.slice(0, 300))}` : ""}`;
+    const target = `/listings/${made.listingId}${made.aiError ? `?ai_error=${encodeURIComponent(made.aiError.slice(0, 300))}` : ""}`;
+    refresh();
+    redirect(target);
   } catch (e) {
-    // Preserve the real generation failure so the UI can show whether this
-    // was a provider quota, unavailable research source, or database issue.
+    // Next.js redirect is a thrown control-flow signal and must pass through.
+    if (e && typeof e === "object" && "digest" in e && String((e as { digest?: unknown }).digest).startsWith("NEXT_REDIRECT")) {
+      throw e;
+    }
     const message = e instanceof Error ? e.message : "Listing generation failed. Please retry.";
     return { error: message.slice(0, 500) };
   }
-  refresh();
-  redirect(target);
 }
 
 export async function saveBrandVoiceAction(value: string): Promise<{ ok: boolean }> {
