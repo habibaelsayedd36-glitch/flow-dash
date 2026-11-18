@@ -607,9 +607,20 @@ Also return a "specs" object with your best estimate for: ${missing.join(", ") |
 
 Return exactly this JSON shape:
 {${LISTING_SHAPE},"specs":{${missing.map((k) => `"${k}":""`).join(",")}}}`;
-  const raw = await callListingJson(p, SYSTEM, userPrompt(brief, m, tone, "", tail));
+  // Spreadsheet jobs used to bypass public product research entirely. When a
+  // row contains only a product name, research it through the same verified
+  // source pipeline as single-product generation before asking the model to write.
+  let researchedBrief = brief;
+  if (!brief.features.trim() && !brief.featuresAr.trim()) {
+    const research = await researchProductBrief(p, brief);
+    researchedBrief = research.brief;
+  }
+  if (!researchedBrief.features.trim() && !researchedBrief.featuresAr.trim()) {
+    throw new Error("No reliable product facts were found in public sources. Add a brand or model number and retry.");
+  }
+  const raw = await callListingJson(p, SYSTEM, userPrompt(researchedBrief, m, tone, "", tail));
   const initialContent = toListing(raw, m);
-  const content = await repairShortBullets(p, brief, m, initialContent, tail);
+  const content = await repairShortBullets(p, researchedBrief, m, initialContent, tail);
   const rawSpecs = (raw.specs && typeof raw.specs === "object" ? raw.specs : {}) as Record<string, unknown>;
   const specs: Partial<Record<SpecKey, string>> = {};
   for (const k of missing) {
