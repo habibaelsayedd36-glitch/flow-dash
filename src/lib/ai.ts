@@ -326,7 +326,7 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
       const message = error instanceof Error ? error.message : String(error);
       // A 120B TPM/rate-limit failure must not discard the whole listing.
       // Retry once with Groq's smaller GPT-OSS model using the same connected key.
-      if (p.id !== "groq" || p.model === "openai/gpt-oss-20b" || !/\\((?:429|500|502|503|504)\\):/.test(message)) throw error;
+      if (p.id !== "groq" || p.model === "openai/gpt-oss-20b" || !["(429):", "(500):", "(502):", "(503):", "(504):"].some((status) => message.includes(status))) throw error;
       data = (await requestChat("openai/gpt-oss-20b")) as typeof data;
     }
     const choice = data.choices?.[0];
