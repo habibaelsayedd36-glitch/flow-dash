@@ -414,31 +414,57 @@ function decodeResearchHtml(value: string): string {
 /** Researches an exact product name against public web results before copy is generated. */
 async function researchProductBrief(provider: AiProvider, brief: ProductBrief): Promise<ProductResearch> {
   const query = [brief.brand, brief.name, "official product details ingredients specifications"].filter(Boolean).join(" ");
-  const searchResponse = await fetch("https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query), {
-    headers: { "user-agent": "Mozilla/5.0 (compatible; FLOWProductResearch/1.0)" },
-    signal: AbortSignal.timeout(12_000), cache: "no-store",
-  });
-  if (!searchResponse.ok) throw new Error("Product research search is temporarily unavailable. Please retry.");
-  const searchHtml = await searchResponse.text();
   const results: Array<{ url: string; title: string; snippet: string }> = [];
-  const blocks = searchHtml.split(/class=["']result(?:\s|")/i).slice(1, 9);
-  for (const block of blocks) {
-    const anchor = block.match(/<a[^>]*class=["'][^"']*result__a[^"']*["'][^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/i);
-    if (!anchor) continue;
-    let href = decodeResearchHtml(anchor[1]);
+  const searchUrls = [
+    "https://www.bing.com/search?format=rss&q=" + encodeURIComponent(query),
+    "https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query),
+  ];
+  let searchWasAvailable = false;
+  for (const searchUrl of searchUrls) {
     try {
-      if (href.startsWith("//")) href = "https:" + href;
-      const parsedUrl = new URL(href);
-      const target = parsedUrl.searchParams.get("uddg") || href;
-      const targetUrl = new URL(target);
-      if (!["http:", "https:"].includes(targetUrl.protocol)) continue;
-      if (/youtube\.com|youtu\.be|facebook\.com|instagram\.com|tiktok\.com|pinterest\./i.test(targetUrl.hostname)) continue;
-      const title = decodeResearchHtml(anchor[2].replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
-      const snippetMatch = block.match(/class=["'][^"']*result__snippet[^"']*["'][^>]*>([\s\S]*?)<\/(?:a|td|div)>/i);
-      const snippet = snippetMatch ? decodeResearchHtml(snippetMatch[1].replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim() : "";
-      if (title && !results.some((item) => item.url === targetUrl.href)) results.push({ url: targetUrl.href, title, snippet });
-    } catch { /* ignore malformed search results */ }
+      const response = await fetch(searchUrl, {
+        headers: { "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36", accept: "application/rss+xml, application/xml, text/html;q=0.9, */*;q=0.8" },
+        signal: AbortSignal.timeout(12_000), cache: "no-store",
+      });
+      if (!response.ok) continue;
+      searchWasAvailable = true;
+      const searchText = await response.text();
+      if (/format=rss/i.test(searchUrl)) {
+        const items = searchText.match(/<item\\b[\\s\\S]*?<\\/item>/gi) ?? [];
+        for (const item of items) {
+          const getTag = (tag: string) => item.match(new RegExp("<" + tag + "[^>]*>([\\s\\S]*?)<\\/" + tag + ">", "i"))?.[1] ?? "";
+          const rawUrl = decodeResearchHtml(getTag("link").replace(/<!\\[CDATA\\[|\\]\\]>/g, "").trim());
+          try {
+            const parsed = new URL(rawUrl);
+            if (!["http:", "https:"].includes(parsed.protocol) || /youtube\\.com|youtu\\.be|facebook\\.com|instagram\\.com|tiktok\\.com|pinterest\\./i.test(parsed.hostname)) continue;
+            const title = decodeResearchHtml(getTag("title").replace(/<!\\[CDATA\\[|\\]\\]>/g, "").replace(/<[^>]+>/g, " ").trim());
+            const snippet = decodeResearchHtml(getTag("description").replace(/<!\\[CDATA\\[|\\]\\]>/g, "").replace(/<[^>]+>/g, " ").trim());
+            if (title && !results.some((entry) => entry.url === parsed.href)) results.push({ url: parsed.href, title, snippet });
+          } catch { /* ignore malformed search results */ }
+        }
+      } else {
+        const blocks = searchText.split(/class=["']result(?:\\s|")/i).slice(1, 9);
+        for (const block of blocks) {
+          const anchor = block.match(/<a[^>]*class=["'][^"']*result__a[^"']*["'][^>]*href=["']([^"']+)["'][^>]*>([\\s\\S]*?)<\\/a>/i);
+          if (!anchor) continue;
+          let href = decodeResearchHtml(anchor[1]);
+          try {
+            if (href.startsWith("//")) href = "https:" + href;
+            const parsed = new URL(href);
+            const target = parsed.searchParams.get("uddg") || href;
+            const targetUrl = new URL(target);
+            if (!["http:", "https:"].includes(targetUrl.protocol) || /youtube\\.com|youtu\\.be|facebook\\.com|instagram\\.com|tiktok\\.com|pinterest\\./i.test(targetUrl.hostname)) continue;
+            const title = decodeResearchHtml(anchor[2].replace(/<[^>]+>/g, " ")).replace(/\\s+/g, " ").trim();
+            const snippetMatch = block.match(/class=["'][^"']*result__snippet[^"']*["'][^>]*>([\\s\\S]*?)<\\/(?:a|td|div)>/i);
+            const snippet = snippetMatch ? decodeResearchHtml(snippetMatch[1].replace(/<[^>]+>/g, " ")).replace(/\\s+/g, " ").trim() : "";
+            if (title && !results.some((entry) => entry.url === targetUrl.href)) results.push({ url: targetUrl.href, title, snippet });
+          } catch { /* ignore malformed search results */ }
+        }
+      }
+      if (results.length >= 5) break;
+    } catch { /* try the next public search provider */ }
   }
+  if (!searchWasAvailable) throw new Error("FLOW's public product search providers are temporarily unavailable. Please retry in a moment.");
   if (!results.length) throw new Error("FLOW could not find public product sources for this exact name. Add a brand or model number and retry.");
 
   const pages = await Promise.all(results.slice(0, 5).map(async (result) => {
