@@ -574,6 +574,21 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
       if (results.length >= 8) break;
     }
   }
+  // RVRS product names are listed together in this verified brand catalogue.
+  // General search often ranks unrelated sneaker-care pages above this catalogue,
+  // so add it explicitly and prioritize it for RVRS rows. The catalogue confirms
+  // product identity and the wording/pack size only; it does not substantiate
+  // ingredients, cleaning performance, materials, or other product claims.
+  if (/\\brvrs\\b/i.test(brandHint + " " + brief.name)) {
+    addResult(
+      "https://frppr.com/brands/rvrs",
+      "FRPPR RVRS brand catalogue",
+      "RVRS product catalogue; product names and pack sizes",
+    );
+    const catalogueIndex = results.findIndex((item) => item.url.includes("frppr.com/brands/rvrs"));
+    if (catalogueIndex > 0) results.unshift(results.splice(catalogueIndex, 1)[0]);
+  }
+
   // Prefer the manufacturer's focused Hyalubalance collection for Dermaelle
   // hydration/cream searches. The full 46-item catalogue is too long: its first
   // page excerpt can omit Oil-Free Hydra-Gel, even though it is the exact match.
@@ -671,9 +686,21 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
   // Do not spend a separate Groq request asking the model to summarize sources.
   // Pass the readable source excerpts into the one listing-generation request;
   // the listing model can write both languages directly from those excerpts.
-  const sourceFacts = readablePages.slice(0, 3).map((item, i) =>
-    "[Verified public source " + (i + 1) + "] " + item.url + "\n" + item.page
-  ).join("\n\n").slice(0, 8500);
+  const sourceFacts = readablePages.slice(0, 3).map((item, i) => {
+    // The RVRS catalogue is an index, not a detailed product page. Pass only
+    // the exact matching catalogue entry so the model cannot borrow claims
+    // from neighboring products in the same list.
+    if (item.url.includes("frppr.com/brands/rvrs")) {
+      const wanted = normalizeResearchMatchText(brief.name).split(/\s+/).filter((token) => token.length > 2);
+      const matchingLines = item.page.split(/\r?\n/).filter((line) => {
+        const normalized = normalizeResearchMatchText(line);
+        return wanted.length > 0 && wanted.some((token) => normalized.includes(token));
+      });
+      return "[Catalogue identity check only — confirms the listed product name/category/pack size, not product features or performance claims] " +
+        item.url + "\n" + matchingLines.join("\n");
+    }
+    return "[Verified public source " + (i + 1) + "] " + item.url + "\n" + item.page;
+  }).join("\n\n").slice(0, 8500);
   const features = brief.features.trim() || sourceFacts;
   const researched: ProductBrief = {
     ...brief,
