@@ -73,18 +73,27 @@ export async function startListingJobAction(
   const client = input.clientId ? (await db.select().from(clients).where(eq(clients.id, input.clientId)))[0] : undefined;
 
   const items: JobItem[] = [];
-  for (const row of job.raw.slice(1)) {
+  const missingBrandRows: number[] = [];
+  for (const [rowIndex, row] of job.raw.slice(1).entries()) {
     const source: Record<string, string> = {};
-    for (const field of FIELDS) {
-      const col = input.mapping?.[field.key];
+    for (const key of ["name", "brand"] as const) {
+      const col = input.mapping?.[key];
       const value = typeof col === "number" && col >= 0 ? String(row[col] ?? "").trim().slice(0, 1500) : "";
-      if (value) source[field.key] = value;
+      if (value) source[key] = value;
     }
-    if (!source.name && !source.nameAr) continue;
-    if (!source.brand && client) source.brand = client.name;
+    if (!source.name && !source.brand) continue;
+    if (!source.name) continue;
+    if (!source.brand) {
+      missingBrandRows.push(rowIndex + 2);
+      continue;
+    }
     items.push({ source, status: "pending" });
   }
-  if (items.length === 0) return { ok: false, error: "No rows have a product name. Check the column mapping." };
+  if (missingBrandRows.length) {
+    const examples = missingBrandRows.slice(0, 8).join(", ");
+    return { ok: false, error: `Add a brand for every product. Missing in spreadsheet row(s): ${examples}${missingBrandRows.length > 8 ? ", …" : ""}.` };
+  }
+  if (items.length === 0) return { ok: false, error: "No complete Product Name + Brand rows found. Check the two columns." };
 
   await db
     .update(jobs)
