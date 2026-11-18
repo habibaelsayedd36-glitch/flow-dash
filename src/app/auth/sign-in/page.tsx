@@ -37,7 +37,11 @@ export default function SignInPage() {
     <main className="fixed inset-0 z-[100] grid min-h-dvh place-items-center overflow-y-auto bg-[#f5f6f2] px-5 py-10 text-[#183c2b]">
       <section className="w-full max-w-md rounded-[28px] border border-[#dfe6dc] bg-white p-8 shadow-[0_24px_80px_rgba(20,60,40,.12)] sm:p-10">
         <div className="mb-8">
-          <div className="mb-6 grid size-12 place-items-center rounded-2xl bg-[#183c2b] text-xl font-semibold text-white">F</div>
+          <img
+            src="https://www.flow-agency-eg.com/assets/logo/flow-lockup-green.png"
+            alt="FLOW"
+            className="mb-6 h-12 w-auto max-w-[190px] object-contain object-left"
+          />
           <p className="mb-2 text-xs font-semibold uppercase tracking-[.22em] text-[#718274]">FLOW WORKSPACE</p>
           <h1 className="text-3xl font-semibold tracking-tight">Welcome back</h1>
           <p className="mt-2 text-sm leading-6 text-[#68766b]">Sign in to continue to your dashboard.</p>
