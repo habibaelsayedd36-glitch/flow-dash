@@ -137,7 +137,17 @@ export function AppNav({ userName, userEmail }: { userName: string; userEmail: s
     </nav>
   );
 
-  const footer = <div className="mt-auto border-t border-border px-2 pt-4"><div className="mb-3 min-w-0"><p className="truncate text-sm font-semibold text-foreground">{userName || "FLOW team"}</p>{userEmail && <p className="mt-0.5 truncate text-xs text-muted-foreground">{userEmail}</p>}</div><SignOutButton /></div>;
+  const footer = (
+    <div className="mt-auto border-t border-border px-2 pt-4">
+      <div className="mb-3 min-w-0 rounded-2xl bg-flow-green px-3 py-3 text-white">
+        <p className="truncate text-sm font-semibold text-white">{userName || "FLOW team"}</p>
+        {userEmail && <p className="mt-0.5 truncate text-xs text-white/80">{userEmail}</p>}
+        <div className="mt-3 [&_button]:border-white/30 [&_button]:text-white [&_button]:hover:bg-white/10">
+          <SignOutButton />
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <>
