@@ -284,168 +284,55 @@ async function post(url: string, headers: Record<string, string>, body: unknown,
 
 /** One request to whichever provider is connected. Returns the raw text of the reply. */
 async function callModel(p: AiProvider, system: string, user: string, json: boolean): Promise<string> {
-  let text = "";
-  if (p.id === "anthropic") {
-    const data = (await post(
-      "https://api.anthropic.com/v1/messages",
-      { "x-api-key": p.key, "anthropic-version": "2023-06-01" },
-      { model: p.model, max_tokens: 4096, system, messages: [{ role: "user", content: user }] },
-      p.label,
-    )) as { content?: { type: string; text?: string }[] };
-    text = (data.content ?? []).filter((b) => b.type === "text").map((b) => b.text ?? "").join("");
-  } else if (p.id === "openai" || p.id === "groq" || p.id === "openrouter") {
-    const endpoint = p.id === "groq" ? "https://api.groq.com/openai/v1/chat/completions" : p.id === "openrouter" ? "https://openrouter.ai/api/v1/chat/completions" : "https://api.openai.com/v1/chat/completions";
-    const requestChat = (model: string) => post(
-      endpoint,
-      { authorization: `Bearer ${p.key}`, ...(p.id === "openrouter" ? { "HTTP-Referer": process.env.NEXT_PUBLIC_SITE_URL || "https://flow-dash-drab.vercel.app", "X-Title": "FLOW Workspace" } : {}) },
-      {
-        model,
-        // GPT-OSS spends completion tokens on hidden reasoning before visible copy.
-        ...(p.id === "openrouter" ? { max_tokens: 4000 } : {}),
-        ...(p.id === "groq"
-          ? {
-              max_completion_tokens: model.includes("gpt-oss") ? 4096 : 1800,
-              ...(model.includes("gpt-oss") ? { reasoning_effort: "low" } : {}),
-            }
-          : {}),
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: user },
-        ],
-        ...(json && p.id !== "groq" ? { response_format: { type: "json_object" } } : {}),
-      },
-      p.label,
-    );
-    let data: { choices?: { finish_reason?: string; message?: { content?: string } }[]; usage?: { completion_tokens?: number; completion_tokens_details?: { reasoning_tokens?: number } } } | undefined;
-    if (p.id === "openrouter" && (p.model.endsWith(":free") || p.model === "openrouter/free")) {
-      // Keep free-tier requests moving when one provider/model is rate-limited
-      // or temporarily unavailable. All candidates are free OpenRouter models.
-      const freeModels = Array.from(new Set([
-        p.model,
-        "baidu/ernie-5.5-flash-preview:free",
-        "nvidia/nemotron-3-ultra-550b-a55b:free",
-        "thinkingmachines/inkling-2-small:free",
-        "inclusionai/ling-3.2-flash:free",
-        "openrouter/free",
-      ]));
-      let lastError: unknown;
-      let completed = false;
-      for (const model of freeModels) {
-        try {
-          data = (await requestChat(model)) as typeof data;
-          completed = true;
-          break;
-        } catch (error) {
-          lastError = error;
-          const message = error instanceof Error ? error.message : String(error);
-          const canTryAnotherFreeModel =
-            ["(402):", "(404):", "(429):", "(502):", "(503):", "(504):"].some((status) => message.includes(status)) ||
-            /no endpoints available|model is unavailable|provider is unavailable|rate.?limit|quota exceeded|temporarily unavailable/i.test(message);
-          if (!canTryAnotherFreeModel) throw error;
-        }
-      }
-      if (!completed) {
-        const lastMessage = lastError instanceof Error ? lastError.message : String(lastError ?? "");
-        throw new Error(`OpenRouter: all configured free models are currently unavailable or rate-limited. Try again later. Last error: ${lastMessage}`);
-      }
-    } else {
-      try {
-        data = (await requestChat(p.model)) as typeof data;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        const retryableFailure = ["(429):", "(500):", "(502):", "(503):", "(504):"].some((status) => message.includes(status));
-        if (p.id !== "groq" || !retryableFailure || p.model === "qwen/qwen3.8-27b") throw error;
-
-        // GPT-OSS 120B and 20B share the same free-tier daily token ceiling.
-        // When the error is a daily-token cap, skip 20B and go straight to Qwen,
-        // which has a separate model quota. For short-window errors, try 20B first.
-        // Keep the same connected Groq key; no additional API key is required.
-        const dailyTokenLimit = /tokens per day|daily token|TPD/i.test(message);
-        const fallbacks = p.model === "openai/gpt-oss-120b"
-          ? dailyTokenLimit
-            ? ["qwen/qwen3.8-27b", "openai/gpt-oss-20b"]
-            : ["openai/gpt-oss-20b", "qwen/qwen3.8-27b"]
-          : ["qwen/qwen3.8-27b"];
-        let lastError: unknown = error;
-        let recovered = false;
-        for (const fallbackModel of fallbacks) {
-          try {
-            data = (await requestChat(fallbackModel)) as typeof data;
-            recovered = true;
-            break;
-          } catch (fallbackError) {
-            lastError = fallbackError;
-          }
-        }
-        if (!recovered) throw lastError;
-      }
-    }
-    const choice = data?.choices?.[0];
-    text = choice?.message?.content ?? "";
-    // Do not throw on an empty GPT-OSS response here: the shared empty-response
-    // handler below must get a chance to retry with the smaller Groq model.
-    // Throwing on finish_reason="length" here accidentally bypassed that fallback.
-  } else {
-    // Gemini expects a model ID, not a provider label or a "models/" resource path.
-    const configuredModel = p.model.replace(/^models\//, "").trim();
-    const primaryModel = /^gemini-[a-z0-9.-]+$/i.test(configuredModel) ? configuredModel : "gemini-3.8-flash";
-    const requestGemini = (model: string) => post(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-      { "x-goog-api-key": p.key },
-      {
-        systemInstruction: { parts: [{ text: system }] },
-        contents: [{ role: "user", parts: [{ text: user }] }],
-        ...(json ? { generationConfig: { responseMimeType: "application/json" } } : {}),
-      },
-      p.label,
-    );
-    let data: { candidates?: { content?: { parts?: { text?: string }[] } }[] } = {};
+  if (p.id !== "openrouter") throw new Error("FLOW Free mode only supports OpenRouter free models.");
+  const requestChat = (model: string) => post(
+    "https://openrouter.ai/api/v1/chat/completions",
+    {
+      authorization: `Bearer ${p.key}`,
+      "HTTP-Referer": process.env.NEXT_PUBLIC_SITE_URL || "https://flow-dash-drab.vercel.app",
+      "X-Title": "FLOW Workspace",
+    },
+    {
+      model,
+      max_tokens: 4000,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+      ...(json ? { response_format: { type: "json_object" } } : {}),
+    },
+    "OpenRouter Free",
+  );
+  const configured = p.model.endsWith(":free") || p.model === "openrouter/free"
+    ? p.model
+    : PROVIDERS.openrouter.defaultModel;
+  const freeModels = Array.from(new Set([
+    configured,
+    "baidu/ernie-5.5-flash-preview:free",
+    "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "thinkingmachines/inkling-2-small:free",
+    "inclusionai/ling-3.2-flash:free",
+    "openrouter/free",
+  ]));
+  let data: { choices?: { message?: { content?: string } }[] } | undefined;
+  let lastError: unknown;
+  for (const model of freeModels) {
     try {
-      data = (await requestGemini(primaryModel)) as typeof data;
+      data = (await requestChat(model)) as typeof data;
+      const result = data?.choices?.[0]?.message?.content?.trim();
+      if (result) return result;
+      lastError = new Error(`OpenRouter Free: ${model} returned an empty response.`);
     } catch (error) {
+      lastError = error;
       const message = error instanceof Error ? error.message : String(error);
-      // Recover old saved model IDs with the current default. If that model is
-      // overloaded, fail over to independent, supported Flash-Lite/Flash models.
-      const retiredModel = message.includes("(404):") && /no longer available|not found|update your code/i.test(message);
-      const overloaded = message.includes("(503):");
-      const quotaExceeded = message.includes("(429):") && /generate_content_free_tier_requests|quota exceeded|requests per day/i.test(message);
-      if (!retiredModel && !overloaded && !quotaExceeded) throw error;
-
-      // A daily free-tier request cap will not clear with a short retry.
-      // Try other currently supported Gemini models with independent model quotas.
-      // Prefer strong Flash models for bilingual marketplace listing quality,
-      // then use Flash-Lite as the low-cost final Gemini-only fallback.
-      const geminiFallbacks = ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-2.5-flash-lite"];
-      const fallbacks = retiredModel
-        ? ["gemini-3.8-flash", ...geminiFallbacks]
-        : quotaExceeded || overloaded
-          ? geminiFallbacks
-          : ["gemini-3.8-flash", ...geminiFallbacks];
-      let lastError: unknown = error;
-      let recovered = false;
-      for (const fallbackModel of [...new Set(fallbacks)].filter((model) => model !== primaryModel)) {
-        try {
-          data = (await requestGemini(fallbackModel)) as typeof data;
-          recovered = true;
-          break;
-        } catch (fallbackError) {
-          lastError = fallbackError;
-        }
-      }
-      if (!recovered) throw lastError;
+      const canTryAnotherFreeModel =
+        ["(402):", "(404):", "(429):", "(502):", "(503):", "(504):"].some((status) => message.includes(status)) ||
+        /no endpoints available|model is unavailable|provider is unavailable|rate.?limit|quota exceeded|temporarily unavailable/i.test(message);
+      if (!canTryAnotherFreeModel) throw error;
     }
-    text = (data.candidates?.[0]?.content?.parts ?? []).map((x) => x.text ?? "").join("");
   }
-  if (!text.trim()) {
-    // Groq may occasionally return an empty assistant message from GPT-OSS 120B.
-    // Retry once on the smaller supported GPT-OSS model before falling back to templates.
-    if (p.id === "groq" && p.model !== "qwen/qwen3.8-27b") {
-      const fallbackModel = p.model === "openai/gpt-oss-120b" ? "openai/gpt-oss-20b" : "qwen/qwen3.8-27b";
-      return callModel({ ...p, model: fallbackModel }, system, user, json);
-    }
-    throw new Error(`${p.label}: empty response from ${p.model}. The automatic Groq fallback model also returned no text.`);
-  }
-  return text;
+  const detail = lastError instanceof Error ? lastError.message : String(lastError ?? "");
+  throw new Error(`All configured OpenRouter free models are unavailable or rate-limited. FLOW did not switch to a paid model. Try again later. ${detail}`);
 }
 
 /** A real round-trip, used by "Test connection" on the Settings page. */
