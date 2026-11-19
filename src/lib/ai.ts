@@ -11,7 +11,7 @@ import { RULES, type ListingContent, type ProductBrief } from "./rules";
  * and callers fall back to the template engine — nothing here fabricates output.
  */
 
-export type ProviderId = "openrouter";
+export type ProviderId = "anthropic" | "openai" | "gemini" | "groq" | "openrouter";
 export type AiProvider = { id: ProviderId; label: string; model: string; key: string; source: "env" | "settings" };
 
 export const PROVIDERS: Record<ProviderId, { label: string; defaultModel: string }> = {
