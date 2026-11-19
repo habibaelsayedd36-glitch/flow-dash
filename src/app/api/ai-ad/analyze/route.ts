@@ -1,5 +1,5 @@
 import { requireApiUser } from "@/lib/auth/server";
-import { getAiProvider } from "@/lib/ai";
+import { getAiProvider, getOpenRouterVisionKey } from "@/lib/ai";
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -18,15 +18,17 @@ export async function POST(request: NextRequest) {
     }
 
     const provider = await getAiProvider();
-    if (!provider || provider.id !== "openrouter") {
-      return NextResponse.json({ error: "Connect an OpenRouter Free API key in Settings & AI Key to analyze product photos." }, { status: 400 });
+    const visionKey = await getOpenRouterVisionKey();
+    const apiKey = visionKey || (provider?.id === "openrouter" ? provider.key : "");
+    if (!apiKey) {
+      return NextResponse.json({ error: "Add an OpenRouter image-analysis key in Settings & AI Key, or connect your main OpenRouter key." }, { status: 400 });
     }
 
     const upstream = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       signal: AbortSignal.timeout(25_000),
       headers: {
-        Authorization: `Bearer ${provider.key}`,
+        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
         "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL || "https://flow-dash-drab.vercel.app",
         "X-Title": "FLOW Workspace",
