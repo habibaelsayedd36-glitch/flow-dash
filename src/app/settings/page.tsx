@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import { AiKeyForm } from "@/components/AiKeyForm";
 import { DeleteAllDataButton } from "@/components/DeleteAllDataButton";
 import { PageHeader } from "@/components/ui";
-import { PROVIDERS, getAiProvider, getOpenRouterVisionKey, maskKey, type ProviderId } from "@/lib/ai";
+import { PROVIDERS, getAiProvider, getOpenRouterVisionKey, getPixelAiKey, maskKey, type ProviderId } from "@/lib/ai";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Settings & AI Key" };
@@ -20,7 +20,7 @@ const SAMPLE = `{
 }`;
 
 export default async function SettingsPage() {
-  const [provider, visionKey, h] = await Promise.all([getAiProvider(), getOpenRouterVisionKey(), headers()]);
+  const [provider, visionKey, pixelAiKey, h] = await Promise.all([getAiProvider(), getOpenRouterVisionKey(), getPixelAiKey(), headers()]);
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "your-dashboard-address";
   const endpoint = `${h.get("x-forwarded-proto") ?? "https"}://${host}/api/leads`;
   const code = "mt-1.5 overflow-x-auto rounded-xl bg-flow-bg-soft px-4 py-3 font-mono text-[13px] leading-relaxed text-foreground";
@@ -35,6 +35,7 @@ export default async function SettingsPage() {
             providers={(Object.keys(PROVIDERS) as ProviderId[]).map((id) => ({ id, label: PROVIDERS[id].label, defaultModel: PROVIDERS[id].defaultModel }))}
             current={provider ? { id: provider.id, label: provider.label, model: provider.model, masked: maskKey(provider.key), source: provider.source } : null}
             visionMasked={visionKey ? maskKey(visionKey) : ""}
+            pixelAiMasked={pixelAiKey ? maskKey(pixelAiKey) : ""}
           />
 
           <section className="card border border-red-200 p-5 sm:p-6" aria-labelledby="data-delete-title">
