@@ -7,7 +7,7 @@ import { logImageJobAction } from "@/app/actions-tools";
 import { FLAG_TEXT, IMAGE_PRESETS, ModelLoadError, compose, cutout, toJpeg, type Cutout, type Flag, type PresetId } from "@/lib/image-engine";
 
 type Angle = "front" | "side" | "back" | "detail";
-type Shot = { id: string; file: File; original: string; preview: string | null; cut: Cutout | null; flags: Flag[]; state: "queued" | "working" | "done" | "error"; angle: Angle };
+type Shot = { id: string; file: File; original: string; preview: string | null; cut: Cutout | null; pixelcutBlob?: Blob; flags: Flag[]; state: "queued" | "working" | "done" | "error"; angle: Angle };
 
 const ANGLES: Angle[] = ["front", "side", "back", "detail"];
 const ANGLE_LABEL: Record<Angle, string> = { front: "Front (main)", side: "Side", back: "Back", detail: "Detail" };
@@ -71,6 +71,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
   const [angleTargets, setAngleTargets] = useState<Exclude<Angle, "front">[]>(["side", "back", "detail"]);
   const [generatingAngles, setGeneratingAngles] = useState(false);
   const [angleStatus, setAngleStatus] = useState("");
+  const [pixelcutBusy, setPixelcutBusy] = useState<string[]>([]);
   const shotsRef = useRef<Shot[]>([]);
   const running = useRef(false);
   const settings = useRef({ tolerance, fill });
@@ -78,6 +79,36 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
   settings.current = { tolerance, fill };
 
   const patch = (id: string, p: Partial<Shot>) => setShots((list) => list.map((s) => (s.id === id ? { ...s, ...p } : s)));
+  const removeWithPixelcut = async (shot: Shot) => {
+    if (pixelcutBusy.includes(shot.id)) return;
+    setPixelcutBusy((list) => [...list, shot.id]);
+    setMessage("");
+    try {
+      const image_b64 = await imageAsBase64(shot.file);
+      const response = await fetch("/api/ai-ad/pixelcut", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image_b64, image_type: "image/png" }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(payload.error || "Pixelcut background removal failed.");
+      }
+      const blob = await response.blob();
+      if (!blob.size || !blob.type.startsWith("image/")) throw new Error("Pixelcut returned an invalid image.");
+      const preview = URL.createObjectURL(blob);
+      setShots((list) => list.map((item) => {
+        if (item.id !== shot.id) return item;
+        if (item.preview) URL.revokeObjectURL(item.preview);
+        return { ...item, preview, pixelcutBlob: blob };
+      }));
+      setMessage(`Pixelcut removed the background from ${shot.file.name}.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Pixelcut background removal failed.");
+    } finally {
+      setPixelcutBusy((list) => list.filter((id) => id !== shot.id));
+    }
+  };
 
   // One photo at a time: full-resolution canvases are large, so the queue never runs in parallel.
   const pump = useCallback(async () => {
@@ -203,14 +234,31 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
     setMessage("");
     try {
       const files: Record<string, Uint8Array> = {};
-      const bytes = async (c: Cutout, px: number, ratio: number) => new Uint8Array(await (await toJpeg(compose(c, px, ratio))).arrayBuffer());
+      const bytes = async (s: Shot, px: number, ratio: number) => {
+        if (!s.pixelcutBlob) return new Uint8Array(await (await toJpeg(compose(s.cut as Cutout, px, ratio))).arrayBuffer());
+        const bitmap = await createImageBitmap(s.pixelcutBlob);
+        const canvas = document.createElement("canvas");
+        canvas.width = px;
+        canvas.height = px;
+        const context = canvas.getContext("2d");
+        if (!context) { bitmap.close(); throw new Error("Could not prepare the Pixelcut export."); }
+        context.fillStyle = "#FFFFFF";
+        context.fillRect(0, 0, px, px);
+        const scale = Math.min((px * ratio) / bitmap.width, (px * ratio) / bitmap.height);
+        const width = bitmap.width * scale;
+        const height = bitmap.height * scale;
+        context.drawImage(bitmap, (px - width) / 2, (px - height) / 2, width, height);
+        bitmap.close();
+        const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob((value) => value ? resolve(value) : reject(new Error("Could not export the Pixelcut image.")), "image/jpeg", 0.92));
+        return new Uint8Array(await blob.arrayBuffer());
+      };
       if (mode === "cleanup") {
         const used = new Set<string>();
         for (const s of done) {
           let name = slug(s.file.name);
           while (used.has(name)) name += "-2";
           used.add(name);
-          files[`${name}.jpg`] = await bytes(s.cut as Cutout, size, fill / 100);
+          files[`${name}.jpg`] = await bytes(s, size, fill / 100);
         }
       } else {
         const id = slug(sku || "product");
@@ -228,7 +276,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
               name = `${id}_${s.angle}${count > 1 || s.angle === "detail" ? `-${count}` : ""}`;
             }
             seen[s.angle] = (seen[s.angle] ?? 0) + 1;
-            files[`${preset.label.replace(/\s+/g, "-")}/${name}.jpg`] = await bytes(s.cut as Cutout, preset.size, preset.fill);
+            files[`${preset.label.replace(/\s+/g, "-")}/${name}.jpg`] = await bytes(s, preset.size, preset.fill);
           }
         }
       }
@@ -267,7 +315,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
             <ImagePlus size={22} aria-hidden />
           </span>
           <span className="font-display text-base font-medium text-ink">Drop product photos here, or choose files</span>
-          <span className="max-w-md text-[13px] leading-relaxed text-mute">{mode === "shots" ? "JPEG, PNG or WebP. Cleanup and pure-white background removal run locally in your browser. The reference photo is sent to your selected AI provider only when you generate new angles." : "JPEG, PNG or WebP. FLOW removes the background locally and exports on pure white. No AI quota is needed for cleanup."}</span>
+          <span className="max-w-md text-[13px] leading-relaxed text-mute">{mode === "shots" ? "JPEG, PNG or WebP. Local cleanup is automatic. Pixelcut background removal is optional and runs only when you click its button; it uses API credits." : "JPEG, PNG or WebP. Local cleanup is automatic. Pixelcut is an optional paid API action and runs only when you click its button."}</span>
           <input type="file" accept="image/*" multiple className="sr-only" onChange={(e) => { add(e.target.files); e.target.value = ""; }} />
         </label>
 
@@ -318,6 +366,10 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
                       <Trash2 size={15} aria-hidden />
                     </button>
                   </div>
+                  <button type="button" className="btn btn-secondary btn-sm w-full" onClick={() => removeWithPixelcut(s)} disabled={pixelcutBusy.includes(s.id)}>
+                    {pixelcutBusy.includes(s.id) ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <ImagePlus size={14} aria-hidden />}
+                    {pixelcutBusy.includes(s.id) ? "Removing with Pixelcut…" : s.pixelcutBlob ? "Run Pixelcut again" : "Remove background with Pixelcut"}
+                  </button>
                   {s.flags.map((f) => (
                     <p key={f} className="flex gap-2 rounded-lg bg-amber-soft px-3 py-2 text-[13px] leading-snug text-amber-ink">
                       <TriangleAlert size={14} aria-hidden className="mt-0.5 shrink-0" />
@@ -336,7 +388,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
           <h2 className="h-section">{mode === "cleanup" ? "Output" : "Product and marketplaces"}</h2>
           <p className="mt-1 text-[13px] leading-relaxed text-mute">
             {mode === "cleanup" ? "Remove the background locally and export the original product photo on pure white. " : "Upload your real product photos, then clean and export them for marketplace image requirements. "}
-            Background removal runs locally in your browser. Background removal and white-background export run locally in your browser. Reference-based image generation is not included in Free mode.
+            Local background cleanup is automatic. Pixelcut is available as an optional API action and may consume credits.
           </p>
         </div>
 
