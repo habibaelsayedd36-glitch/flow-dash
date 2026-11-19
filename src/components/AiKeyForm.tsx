@@ -81,7 +81,7 @@ export function AiKeyForm({ providers, current }: { providers: ProviderOpt[]; cu
               aria-describedby="ai-key-help"
             />
             <p id="ai-key-help" className="mt-1.5 text-[13px] leading-relaxed text-mute">
-              Create a key in Anthropic, OpenAI, Google AI Studio, Groq or OpenRouter. OpenRouter supports compatible chat models; model access and pricing depend on your OpenRouter account. Leave the model empty to use {selected.defaultModel}; if your provider rejects that
+              Create a key in Anthropic, OpenAI, Google AI Studio, Groq or OpenRouter. OpenRouter supports compatible text models and Recraft free image generation; model access and free-tier limits depend on your OpenRouter account. Leave the model empty to use {selected.defaultModel}; if your provider rejects that
               name, type the model your account offers.
             </p>
             {state.error && <p role="alert" className="mt-1.5 text-[13px] text-danger">{state.error}</p>}
