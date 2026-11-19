@@ -59,6 +59,17 @@ export async function saveOpenRouterVisionKeyAction(fd: FormData): Promise<void>
   refresh();
 }
 
+export async function savePixelAiKeyAction(fd: FormData): Promise<void> {
+  await requireUser();
+  await ensureDb();
+  const key = String(fd.get("pixelAiKey") ?? "").trim();
+  if (key && (key.length < 12 || key.length > 500 || /\\s/.test(key))) {
+    throw new Error("That does not look like a valid PixelAI API key.");
+  }
+  if (key) await setSetting("pixelai_api_key", key);
+  refresh();
+}
+
 export async function removeAiKeyAction() {
   await requireUser();
   await ensureDb();
