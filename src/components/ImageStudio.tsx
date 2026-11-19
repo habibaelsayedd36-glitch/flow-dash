@@ -326,7 +326,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
           <h2 className="h-section">{mode === "cleanup" ? "Output" : "Product and marketplaces"}</h2>
           <p className="mt-1 text-[13px] leading-relaxed text-mute">
             {mode === "cleanup" ? "Gemini studio retouch: improve product lighting, sharpness and photographic quality while preserving the exact item, then remove the background and export on pure white at 2000 × 2000. " : "Upload one clear Front photo, choose Side, Back or Detail, and generate new AI angle views from the same product reference. "}
-            Background removal runs locally in your browser. AI is used only when generating new angle views; select Google Gemini or OpenAI in Settings & AI Key.
+            Background removal runs locally in your browser. AI is used only when generating new angle views; select Google Gemini or OpenAI in Settings & AI Key. OpenRouter text-to-image models cannot preserve an uploaded product reference.
           </p>
         </div>
 
@@ -338,7 +338,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
             </div>
             <div className="rounded-xl border border-line bg-sage-soft p-3.5">
               <h3 className="text-sm font-semibold text-ink">Generate other product angles</h3>
-              <p className="mt-1 text-xs leading-relaxed text-mute">Use your Front photo as the reference. Your selected AI provider creates professional studio-quality Side, Back and Detail views on pure white, then FLOW cleans and exports them.</p>
+              <p className="mt-1 text-xs leading-relaxed text-mute">Use your Front photo as the reference. Google Gemini or OpenAI edits the supplied photo to create studio-quality views. OpenRouter text-to-image is not used here because it can replace your product with a different item.</p>
               <div className="mt-3 flex flex-wrap gap-3">
                 {(["side", "back", "detail"] as const).map((angle) => (
                   <label key={angle} className="flex items-center gap-2 text-sm text-ink">
