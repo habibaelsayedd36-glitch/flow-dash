@@ -789,10 +789,16 @@ export async function generateJobItem(
   const tail = `Confirmed specifications from the receiving sheet (facts — you may use them in the copy):
 ${knownText || "(none)"}
 
-Also return a "specs" object with your best estimate for: ${missing.join(", ") || "(nothing)"}.
-- Estimate only when the product name or features make the value reasonably clear; otherwise return an empty string.
-- Give weight with a unit (e.g. "350 g") and dimensions as L x W x H with a unit.
-- These estimates are flagged for a person to verify. NEVER use an estimated value in a title, bullet or description.
+Also return a "specs" object for every requested field: ${missing.join(", ") || "(nothing)"}.
+- Your task is to FILL as many missing specification fields as the available evidence reasonably allows, not to leave them blank by default.
+- First extract exact values stated anywhere in the supplied product research/source text, including tables, technical details, variant names, packaging details and product descriptions. Do not overlook facts just because they are not in a dedicated specification table.
+- For fields not explicitly stated, provide a clearly plausible category-level estimate ONLY when a normal, defensible estimate is possible from the exact product type/model and supplied evidence. Do not invent a precise measurement, weight, material or country of manufacture without evidence.
+- For colour, use a visible/explicit product colour only when the supplied information identifies it; do not infer colour from a generic product name.
+- For size, use the stated variant/volume/count/model size when available. For material, use a stated material or a well-established material for this exact model only. For weight and dimensions, prefer exact manufacturer/retailer data; otherwise give a clearly approximate estimate only if defensible.
+- Country of origin must be an explicit verified "Made in" fact; never infer it from brand nationality, seller location or manufacturer headquarters.
+- Give weight with a unit (e.g. "350 g") and dimensions as L x W x H with a unit. Mark estimates with "~" (for example "~350 g") so the user can distinguish them from verified values.
+- Return an empty string only when neither source evidence nor a defensible estimate exists. Never fabricate a value merely to avoid an empty field.
+- These values are shown separately as estimates for human verification. NEVER use an estimated value in a title, bullet or description.
 
 Return exactly this JSON shape:
 {${LISTING_SHAPE},"specs":{${missing.map((k) => `"${k}":""`).join(",")}}}`;
