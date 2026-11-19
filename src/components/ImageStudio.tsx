@@ -38,7 +38,7 @@ async function imageAsBase64(file: File): Promise<string> {
   return btoa(binary);
 }
 
-function anglePrompt(angle: Exclude<Angle, "front">): string {
+function anglePrompt(angle: Exclude<Angle, "front">, productDescription: string): string {
   const view = {
     side: "Create a true 90-degree side profile view, showing the product's side silhouette, depth and real construction.",
     back: "Rotate the same product to show its rear side directly, as a realistic straight-on back view.",
@@ -49,7 +49,7 @@ function anglePrompt(angle: Exclude<Angle, "front">): string {
     "Edit the supplied reference photo into ONE photorealistic, premium advertising-quality studio product photograph.",
     view,
     "BACKGROUND IS MANDATORY: perfectly pure seamless white #FFFFFF, evenly white edge-to-edge. No grey, cream, gradients, scenery, colored surfaces, props, decorations, text overlays, frames or watermarks.",
-    "PRODUCT FIDELITY IS CRITICAL: preserve the exact product identity, silhouette, geometry, proportions, packaging, cap/pump, materials, colors, finish, label layout, logos and every legible word. Do not redesign, beautify by changing the product, invent text, repair labels by guessing, add accessories or create extra products.",
+    `REFERENCE PHOTO ANALYSIS (supplementary only; the uploaded photo remains the source of truth): ${productDescription}`,\n    "PRODUCT FIDELITY IS CRITICAL: preserve the exact product identity, silhouette, geometry, proportions, packaging, cap/pump, materials, colors, finish, label layout, logos and every legible word. Do not redesign, beautify by changing the product, invent text, repair labels by guessing, add accessories or create extra products.",
     "Make the product itself look professionally photographed: crisp fine detail, high resolution, clean realistic edges, balanced premium studio key light with soft fill, accurate white balance, controlled highlights, natural material reflections, rich but true-to-life color, subtle realistic contact shadow directly beneath the product.",
     "The product must be upright, fully visible from top to bottom, large and precisely centered, occupying approximately 85–90% of the square frame while keeping safe margins so no part is cropped. Match the clean premium marketplace MAIN-image style: pure white #FFFFFF background, front-facing catalog presentation when the requested angle is front, professional studio lighting, crisp realistic detail and polished commercial retouching. For side, back and detail requests, preserve the requested camera angle while keeping the same white-background studio style and exact product identity.",
     "Do not create a lifestyle scene. Do not add any background objects. The only subject is the exact product on pure white.",
@@ -133,12 +133,21 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
     setMessage("");
     try {
       const image_b64 = await imageAsBase64(source.file);
+      setAngleStatus("Analyzing the original product photo with Nemotron Vision…");
+      const analysisResponse = await fetch("/api/ai-ad/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image_b64, image_type: "image/png" }),
+      });
+      const analysisPayload = await analysisResponse.json().catch(() => ({})) as { description?: string; error?: string };
+      if (!analysisResponse.ok || !analysisPayload.description) throw new Error(analysisPayload.error || "Could not analyze the reference product photo.");
+      const productDescription = analysisPayload.description;
       for (const angle of angleTargets) {
         setAngleStatus(`Generating ${ANGLE_LABEL[angle]} view…`);
         const response = await fetch("/api/ai-ad/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: anglePrompt(angle), image_b64, image_type: "image/png" }),
+          body: JSON.stringify({ prompt: anglePrompt(angle, productDescription), image_b64, image_type: "image/png" }),
         });
         if (!response.ok) {
           const payload = await response.json().catch(() => ({}));
@@ -326,7 +335,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
           <h2 className="h-section">{mode === "cleanup" ? "Output" : "Product and marketplaces"}</h2>
           <p className="mt-1 text-[13px] leading-relaxed text-mute">
             {mode === "cleanup" ? "Gemini studio retouch: improve product lighting, sharpness and photographic quality while preserving the exact item, then remove the background and export on pure white at 2000 × 2000. " : "Upload one clear Front photo, choose Side, Back or Detail, and generate new AI angle views from the same product reference. "}
-            Background removal runs locally in your browser. AI is used only when generating new angle views; select Google Gemini or OpenAI in Settings & AI Key. OpenRouter text-to-image models cannot preserve an uploaded product reference.
+            Background removal runs locally in your browser. AI first analyzes the reference photo with OpenRouter Nemotron Vision, then Google Gemini or OpenAI edits the supplied photo. OpenRouter text-to-image models cannot preserve an uploaded product reference.
           </p>
         </div>
 
@@ -338,7 +347,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
             </div>
             <div className="rounded-xl border border-line bg-sage-soft p-3.5">
               <h3 className="text-sm font-semibold text-ink">Generate other product angles</h3>
-              <p className="mt-1 text-xs leading-relaxed text-mute">Use your Front photo as the reference. Google Gemini or OpenAI edits the supplied photo to create studio-quality views. OpenRouter text-to-image is not used here because it can replace your product with a different item.</p>
+              <p className="mt-1 text-xs leading-relaxed text-mute">FLOW first analyzes your Front photo with Nemotron Vision, then sends the original photo plus the analysis and fixed studio-style prompt to Google Gemini or OpenAI for editing. OpenRouter text-to-image is not used for reference editing.</p>
               <div className="mt-3 flex flex-wrap gap-3">
                 {(["side", "back", "detail"] as const).map((angle) => (
                   <label key={angle} className="flex items-center gap-2 text-sm text-ink">
