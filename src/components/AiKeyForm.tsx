@@ -2,12 +2,12 @@
 
 import { Check, KeyRound, Loader2, PlugZap, Trash2, X } from "lucide-react";
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
-import { removeAiKeyAction, saveAiKeyAction, saveOpenRouterVisionKeyAction, testAiAction, type KeyState } from "@/app/actions-tools";
+import { removeAiKeyAction, saveAiKeyAction, testAiAction, type KeyState } from "@/app/actions-tools";
 
 type ProviderOpt = { id: string; label: string; defaultModel: string };
 type Current = { id: string; label: string; model: string; masked: string; source: "env" | "settings" } | null;
 
-export function AiKeyForm({ providers, current, visionMasked }: { providers: ProviderOpt[]; current: Current; visionMasked: string }) {
+export function AiKeyForm({ providers, current }: { providers: ProviderOpt[]; current: Current }) {
   const [provider, setProvider] = useState(current?.id ?? (providers.find((p) => p.id === "gemini") ?? providers[0]).id);
   const [state, action, saving] = useActionState<KeyState, FormData>(saveAiKeyAction, {});
   const [test, setTest] = useState<{ ok: boolean; message: string } | null>(null);
@@ -35,7 +35,7 @@ export function AiKeyForm({ providers, current, visionMasked }: { providers: Pro
   return (
     <section className="card p-5 sm:p-6" aria-labelledby="ai-key">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 id="ai-key" className="h-section">AI provider</h2>
+        <h2 id="ai-key" className="h-section">Free AI provider</h2>
         {current ? (
           <span className={`pill !h-8 !px-3 ${test?.ok ? "pill-ok" : "pill-mute"}`}>
             {test?.ok && <Check size={14} aria-hidden />}
@@ -81,8 +81,7 @@ export function AiKeyForm({ providers, current, visionMasked }: { providers: Pro
               aria-describedby="ai-key-help"
             />
             <p id="ai-key-help" className="mt-1.5 text-[13px] leading-relaxed text-mute">
-              Create a key in Anthropic, OpenAI, Google AI Studio, Groq or OpenRouter. OpenRouter supports compatible text models and Recraft free image generation; model access and free-tier limits depend on your OpenRouter account. Leave the model empty to use {selected.defaultModel}; if your provider rejects that
-              name, type the model your account offers.
+              Use an OpenRouter API key. FLOW only routes AI text and vision requests to free-tier models; free model availability and rate limits depend on your OpenRouter account. Paid models are rejected and never used as fallbacks.
             </p>
             {state.error && <p role="alert" className="mt-1.5 text-[13px] text-danger">{state.error}</p>}
             {state.ok && <p role="status" className="mt-1.5 text-[13px] text-forest">Saved. Run the test to confirm the key works.</p>}
