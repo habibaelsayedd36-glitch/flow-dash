@@ -11,42 +11,30 @@ import { RULES, type ListingContent, type ProductBrief } from "./rules";
  * and callers fall back to the template engine — nothing here fabricates output.
  */
 
-export type ProviderId = "anthropic" | "openai" | "gemini" | "groq" | "openrouter";
+export type ProviderId = "openrouter";
 export type AiProvider = { id: ProviderId; label: string; model: string; key: string; source: "env" | "settings" };
 
 export const PROVIDERS: Record<ProviderId, { label: string; defaultModel: string }> = {
-  anthropic: { label: "Anthropic Claude", defaultModel: "claude-sonnet-5-5" },
-  openai: { label: "OpenAI", defaultModel: "gpt-5-mini" },
-  gemini: { label: "Google Gemini", defaultModel: "gemini-3.8-flash" },
-  groq: { label: "Groq (Free)", defaultModel: "openai/gpt-oss-120b" },
-  openrouter: { label: "OpenRouter (Free)", defaultModel: "baidu/ernie-5.5-flash-preview:free" },
+  openrouter: { label: "OpenRouter Free", defaultModel: "baidu/ernie-5.5-flash-preview:free" },
 };
 export const isProviderId = (v: unknown): v is ProviderId => typeof v === "string" && v in PROVIDERS;
 
 export async function getAiProvider(): Promise<AiProvider | null> {
-  const override = process.env.AI_MODEL?.trim();
-  const env: [ProviderId, string | undefined][] = [
-    ["anthropic", process.env.ANTHROPIC_API_KEY],
-    ["openai", process.env.OPENAI_API_KEY],
-    ["gemini", process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY],
-    ["groq", process.env.GROQ_API_KEY],
-    ["openrouter", process.env.OPENROUTER_API_KEY],
-  ];
-  for (const [id, key] of env) {
-    if (key) return { id, label: PROVIDERS[id].label, model: override || PROVIDERS[id].defaultModel, key, source: "env" };
-  }
+  const envKey = process.env.OPENROUTER_API_KEY;
+  const envModel = process.env.AI_MODEL?.trim() ?? "";
+  const isFreeModel = (model: string) => model.endsWith(":free") || model === "openrouter/free";
+  if (envKey) return { id: "openrouter", label: PROVIDERS.openrouter.label, model: isFreeModel(envModel) ? envModel : PROVIDERS.openrouter.defaultModel, key: envKey, source: "env" };
   try {
     const rows = await db.select().from(settings).where(inArray(settings.key, ["ai_provider", "ai_key", "ai_model"]));
     const get = (k: string) => rows.find((r) => r.key === k)?.value.trim() ?? "";
     const id = get("ai_provider");
     const key = get("ai_key");
-    if (isProviderId(id) && key) {
+    if (id === "openrouter" && key) {
       const savedModel = get("ai_model");
-      // Replace the previous paid OpenRouter default for existing accounts too.
-      const model = id === "openrouter" && (!savedModel || savedModel === "openai/gpt-4o")
-        ? PROVIDERS.openrouter.defaultModel
-        : savedModel || PROVIDERS[id].defaultModel;
-      return { id, label: PROVIDERS[id].label, model, key, source: "settings" };
+      const model = savedModel && (savedModel.endsWith(":free") || savedModel === "openrouter/free")
+        ? savedModel
+        : PROVIDERS.openrouter.defaultModel;
+      return { id: "openrouter", label: PROVIDERS.openrouter.label, model, key, source: "settings" };
     }
   } catch {
     // settings table not ready yet
