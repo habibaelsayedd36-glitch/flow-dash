@@ -2,13 +2,13 @@
 
 import { Check, KeyRound, Loader2, PlugZap, Trash2, X } from "lucide-react";
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
-import { removeAiKeyAction, saveAiKeyAction, testAiAction, type KeyState } from "@/app/actions-tools";
+import { removeAiKeyAction, saveAiKeyAction, saveOpenRouterVisionKeyAction, testAiAction, type KeyState } from "@/app/actions-tools";
 
 type ProviderOpt = { id: string; label: string; defaultModel: string };
 type Current = { id: string; label: string; model: string; masked: string; source: "env" | "settings" } | null;
 
-export function AiKeyForm({ providers, current }: { providers: ProviderOpt[]; current: Current }) {
-  const [provider, setProvider] = useState(current?.id ?? (providers.find((p) => p.id === "gemini") ?? providers[0]).id);
+export function AiKeyForm({ providers, current, visionMasked }: { providers: ProviderOpt[]; current: Current; visionMasked: string }) {
+  const [provider, setProvider] = useState(current?.id ?? providers[0].id);
   const [state, action, saving] = useActionState<KeyState, FormData>(saveAiKeyAction, {});
   const [test, setTest] = useState<{ ok: boolean; message: string } | null>(null);
   const [testing, setTesting] = useState(false);
