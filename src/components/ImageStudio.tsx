@@ -38,34 +38,6 @@ async function imageAsBase64(file: File): Promise<string> {
   return btoa(binary);
 }
 
-function enhancementPrompt(): string {
-  return [
-    "Act as a world-class commercial product photographer and professional ecommerce image retoucher.",
-    "Retouch the exact product in the supplied photograph into a premium, photorealistic studio catalog image.",
-    "Preserve the exact physical product: identity, silhouette, dimensions, proportions, packaging, label, typography, logo, colors, materials, finish, cap, pump and every visible detail. Do not redesign, replace, reconstruct, add, remove or invent any product feature or text.",
-    "Improve only photographic quality: professional softbox studio lighting, balanced exposure, clean accurate white balance, crisp focus, fine-detail clarity, natural realistic reflections, controlled highlights, true-to-life color and a subtle natural contact shadow.",
-    "Keep the camera view and product orientation from the input photograph. Do not invent another angle or reveal hidden sides.",
-    "Place the product upright and centered on a perfectly uniform pure white #FFFFFF background, edge to edge. No grey cast, gradient, props, hands, scenery, extra objects, text overlays, border or watermark.",
-    "One product only. Square 1:1 premium commercial product photography, sharp clean edges, high-end professional retouching.",
-  ].join(" ");
-}
-
-async function geminiProductEdit(file: File, prompt: string): Promise<File> {
-  const image_b64 = await imageAsBase64(file);
-  const response = await fetch("/api/ai-ad/generate", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt, image_b64, image_type: "image/png" }),
-  });
-  if (!response.ok) {
-    const payload = await response.json().catch(() => ({}));
-    throw new Error(payload.error || "Gemini could not retouch this product photo.");
-  }
-  const blob = await response.blob();
-  if (!blob.size || !blob.type.startsWith("image/")) throw new Error("Gemini returned an invalid product image.");
-  return new File([blob], file.name.replace(/\.[^.]+$/, "") + "-studio.png", { type: blob.type });
-}
-
 function anglePrompt(angle: Exclude<Angle, "front">): string {
   const view = {
     side: "Create a true 90-degree side profile view, showing the product's side silhouette, depth and real construction.",
