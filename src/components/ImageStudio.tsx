@@ -16,7 +16,7 @@ const slug = (s: string) => s.trim().replace(/\.[a-z0-9]+$/i, "").replace(/[^A-Z
 
 async function imageAsBase64(file: File): Promise<string> {
   const bitmap = await createImageBitmap(file);
-  const scale = Math.min(512 / bitmap.width, 512 / bitmap.height, 1);
+  const scale = Math.min(1024 / bitmap.width, 1024 / bitmap.height, 1);
   const canvas = document.createElement("canvas");
   canvas.width = Math.max(1, Math.round(bitmap.width * scale));
   canvas.height = Math.max(1, Math.round(bitmap.height * scale));
@@ -40,18 +40,19 @@ async function imageAsBase64(file: File): Promise<string> {
 
 function anglePrompt(angle: Exclude<Angle, "front">): string {
   const view = {
-    side: "Create a true 90-degree side profile view, showing the product's side silhouette and depth.",
+    side: "Create a true 90-degree side profile view, showing the product's side silhouette, depth and real construction.",
     back: "Rotate the same product to show its rear side directly, as a realistic straight-on back view.",
-    detail: "Create a close-up commercial detail shot of the same product, focusing on its real material, cap, dispenser, texture and construction.",
+    detail: "Create a premium macro commercial photograph of a real visible product detail, preserving the exact material, finish, cap, dispenser and texture.",
   }[angle];
   return [
-    "Use the uploaded product photo as the sole visual reference and create a photorealistic ecommerce product photograph of the exact same physical item.",
+    "Act as a senior commercial product photographer and high-end ecommerce retoucher.",
+    "Edit the supplied reference photo into ONE photorealistic, premium advertising-quality studio product photograph.",
     view,
-    "This must be a genuinely different camera angle, not another front-facing image and not a mirrored copy.",
-    "Keep the same product identity, package geometry, proportions, cap or pump, materials, colors, finish and brand styling. Do not add accessories, hands, people, props or extra products.",
-    "Do not invent readable words, numbers, ingredients, barcodes or logos on surfaces that are not visible in the reference. Keep unseen label areas visually neutral rather than fabricating text.",
-    "Show the complete product, upright and centered, on a perfectly uniform pure white #FFFFFF background with only a very subtle contact shadow.",
-    "Square 1:1 high-end studio product photography, crisp realistic edges, neutral lighting, no watermark, no border, no scenery.",
+    "BACKGROUND IS MANDATORY: perfectly pure seamless white #FFFFFF, evenly white edge-to-edge. No grey, cream, gradients, scenery, colored surfaces, props, decorations, text overlays, frames or watermarks.",
+    "PRODUCT FIDELITY IS CRITICAL: preserve the exact product identity, silhouette, geometry, proportions, packaging, cap/pump, materials, colors, finish, label layout, logos and every legible word. Do not redesign, beautify by changing the product, invent text, repair labels by guessing, add accessories or create extra products.",
+    "Make the product itself look professionally photographed: crisp fine detail, high resolution, clean realistic edges, balanced premium studio key light with soft fill, accurate white balance, controlled highlights, natural material reflections, rich but true-to-life color, subtle realistic contact shadow directly beneath the product.",
+    "The product must be upright, fully visible, large and elegantly centered with consistent margins. Square 1:1 composition, commercial catalog sharpness, polished professional retouching.",
+    "Do not create a lifestyle scene. Do not add any background objects. The only subject is the exact product on pure white.",
   ].join(" ");
 }
 
@@ -256,7 +257,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
             <ImagePlus size={22} aria-hidden />
           </span>
           <span className="font-display text-base font-medium text-ink">Drop product photos here, or choose files</span>
-          <span className="max-w-md text-[13px] leading-relaxed text-mute">{mode === "shots" ? "JPEG, PNG or WebP. Cleanup runs locally; the selected reference photo is sent to Cloudflare only when you generate new AI angles." : "JPEG, PNG or WebP. Photos are processed in your browser and never leave this computer."}</span>
+          <span className="max-w-md text-[13px] leading-relaxed text-mute">{mode === "shots" ? "JPEG, PNG or WebP. Cleanup runs locally; the selected reference photo is sent securely to Gemini only when you generate new AI angles." : "JPEG, PNG or WebP. Photos are processed in your browser and never leave this computer."}</span>
           <input type="file" accept="image/*" multiple className="sr-only" onChange={(e) => { add(e.target.files); e.target.value = ""; }} />
         </label>
 
@@ -325,7 +326,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
           <h2 className="h-section">{mode === "cleanup" ? "Output" : "Product and marketplaces"}</h2>
           <p className="mt-1 text-[13px] leading-relaxed text-mute">
             {mode === "cleanup" ? "Automatic Amazon main-image cleanup: remove the background, center the original product on pure white, and export a 2000 × 2000 image with the product filling 85% of the frame. " : "Upload one clear Front photo, choose Side, Back or Detail, and generate new AI angle views from the same product reference. "}
-            The cut-out runs in your browser with an open-source AI model. The first photo takes longer while the model downloads, then allow 10 to 20 seconds per photo.
+            Background removal runs locally in your browser. Gemini is used only for generating new angle views; allow a little extra time for each view.
           </p>
         </div>
 
@@ -337,7 +338,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
             </div>
             <div className="rounded-xl border border-line bg-sage-soft p-3.5">
               <h3 className="text-sm font-semibold text-ink">Generate other product angles</h3>
-              <p className="mt-1 text-xs leading-relaxed text-mute">Use your Front photo as the reference. AI will create new Side, Back and Detail views, then clean their backgrounds automatically.</p>
+              <p className="mt-1 text-xs leading-relaxed text-mute">Use your Front photo as the reference. Gemini creates professional studio-quality Side, Back and Detail views on pure white, then FLOW cleans and exports them.</p>
               <div className="mt-3 flex flex-wrap gap-3">
                 {(["side", "back", "detail"] as const).map((angle) => (
                   <label key={angle} className="flex items-center gap-2 text-sm text-ink">
