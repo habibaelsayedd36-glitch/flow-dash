@@ -64,9 +64,9 @@ export async function savePixelAiKeyAction(fd: FormData): Promise<void> {
   await ensureDb();
   const key = String(fd.get("pixelAiKey") ?? "").trim();
   if (key && (key.length < 12 || key.length > 500 || /\s/.test(key))) {
-    throw new Error("That does not look like a valid PixelAI API key.");
+    throw new Error("That does not look like a valid Pixelcut API key.");
   }
-  if (key) await setSetting("pixelai_api_key", key);
+  if (key) await setSetting("pixelcut_api_key", key);
   refresh();
 }
 
