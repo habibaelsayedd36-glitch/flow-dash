@@ -38,6 +38,7 @@ export default async function SettingsPage() {
           <AiKeyForm
             providers={(Object.keys(PROVIDERS) as ProviderId[]).map((id) => ({ id, label: PROVIDERS[id].label, defaultModel: PROVIDERS[id].defaultModel }))}
             current={provider ? { id: provider.id, label: provider.label, model: provider.model, masked: maskKey(provider.key), source: provider.source } : null}
+            visionMasked={visionKey ? maskKey(visionKey) : ""}
           />
 
           <section className="card border border-red-200 p-5 sm:p-6" aria-labelledby="data-delete-title">
@@ -79,7 +80,7 @@ export default async function SettingsPage() {
               <li>Workflow Engine: the rule that drafts a listing when a product reaches Listing optimization.</li>
               <li>Reviews & Health: reply drafts, which a person edits and posts.</li>
             </ul>
-            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">Image Clean-up runs locally in your browser and does not use an AI key. OpenRouter also supports free Recraft image generation in Image Angles. Unlike Gemini and OpenAI image editing, this text-to-image endpoint does not use the uploaded reference photo, so it cannot guarantee the exact same product packaging or label.</p>
+            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">Image Clean-up runs locally in your browser and does not use an AI key. Nemotron Vision on OpenRouter can analyze a product reference photo before Gemini or OpenAI edits it. OpenRouter text-to-image generation is not used for reference-preserving Image Angles.</p>
           </section>
 
           <aside className="flex gap-3 rounded-2xl border border-amber-300 bg-amber-soft p-4 sm:p-5">
