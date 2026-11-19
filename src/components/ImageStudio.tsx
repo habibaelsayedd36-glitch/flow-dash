@@ -38,6 +38,25 @@ async function imageAsBase64(file: File): Promise<string> {
   return btoa(binary);
 }
 
+function anglePrompt(angle: Exclude<Angle, "front">, productDescription: string): string {
+  const view = {
+    side: "Create a true 90-degree side profile view, showing the product's side silhouette, depth and real construction.",
+    back: "Rotate the same product to show its rear side directly, as a realistic straight-on back view.",
+    detail: "Create a premium macro commercial photograph of a real visible product detail, preserving the exact material, finish, cap, dispenser and texture.",
+  }[angle];
+  return [
+    "Act as a senior commercial product photographer and high-end ecommerce retoucher.",
+    "Edit the supplied reference photo into ONE photorealistic, premium advertising-quality studio product photograph.",
+    view,
+    "BACKGROUND IS MANDATORY: perfectly pure seamless white #FFFFFF, evenly white edge-to-edge. No grey, cream, gradients, scenery, colored surfaces, props, decorations, text overlays, frames or watermarks.",
+    `REFERENCE PHOTO ANALYSIS (supplementary only; the uploaded photo remains the source of truth): ${productDescription}`,
+    "PRODUCT FIDELITY IS CRITICAL: preserve the exact product identity, silhouette, geometry, proportions, packaging, cap/pump, materials, colors, finish, label layout, logos and every legible word. Do not redesign, beautify by changing the product, invent text, repair labels by guessing, add accessories or create extra products.",
+    "Make the product itself look professionally photographed: crisp fine detail, high resolution, clean realistic edges, balanced premium studio key light with soft fill, accurate white balance, controlled highlights, natural material reflections, rich but true-to-life color, subtle realistic contact shadow directly beneath the product.",
+    "The product must be upright, fully visible from top to bottom, large and precisely centered, occupying approximately 85–90% of the square frame while keeping safe margins so no part is cropped. Match the clean premium marketplace MAIN-image style: pure white #FFFFFF background, front-facing catalog presentation when the requested angle is front, professional studio lighting, crisp realistic detail and polished commercial retouching. For side, back and detail requests, preserve the requested camera angle while keeping the same white-background studio style and exact product identity.",
+    "Do not create a lifestyle scene. Do not add any background objects. The only subject is the exact product on pure white.",
+  ].join(" ");
+}
+
 export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
   const [shots, setShots] = useState<Shot[]>([]);
   const [tolerance, setTolerance] = useState(40);
@@ -49,6 +68,9 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
   const [message, setMessage] = useState("");
   const [dragging, setDragging] = useState(false);
   const [modelError, setModelError] = useState(false);
+  const [angleTargets, setAngleTargets] = useState<Exclude<Angle, "front">[]>(["side", "back", "detail"]);
+  const [generatingAngles, setGeneratingAngles] = useState(false);
+  const [angleStatus, setAngleStatus] = useState("");
   const shotsRef = useRef<Shot[]>([]);
   const running = useRef(false);
   const settings = useRef({ tolerance, fill });
@@ -99,11 +121,65 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
         cut: null,
         flags: [],
         state: "queued",
-        angle: "front",
+        angle: ANGLES[Math.min(list.length + i, 3)],
       })),
     ]);
   };
 
+
+  const generateAngles = async () => {
+    const source = shots.find((shot) => shot.angle === "front") ?? shots[0];
+    if (!source || angleTargets.length === 0 || generatingAngles) return;
+    setGeneratingAngles(true);
+    setMessage("");
+    try {
+      const image_b64 = await imageAsBase64(source.file);
+      setAngleStatus("Analyzing the original product photo with Nemotron Vision…");
+      const analysisResponse = await fetch("/api/ai-ad/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image_b64, image_type: "image/png" }),
+      });
+      const analysisPayload = await analysisResponse.json().catch(() => ({})) as { description?: string; error?: string };
+      if (!analysisResponse.ok || !analysisPayload.description) throw new Error(analysisPayload.error || "Could not analyze the reference product photo.");
+      const productDescription = analysisPayload.description;
+      for (const angle of angleTargets) {
+        setAngleStatus(`Generating ${ANGLE_LABEL[angle]} view…`);
+        const response = await fetch("/api/ai-ad/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: anglePrompt(angle, productDescription), image_b64, image_type: "image/png" }),
+        });
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({}));
+          throw new Error(payload.error || `Could not generate the ${ANGLE_LABEL[angle]} view.`);
+        }
+        const blob = await response.blob();
+        if (!blob.size || !blob.type.startsWith("image/")) {
+          throw new Error(`AI returned an invalid ${ANGLE_LABEL[angle]} image.`);
+        }
+        const generatedFile = new File([blob], `${slug(sku || source.file.name)}-${angle}.png`, { type: "image/png" });
+        const generatedShot: Shot = {
+          id: `${Date.now()}-${angle}-${Math.random().toString(36).slice(2, 8)}`,
+          file: generatedFile,
+          original: URL.createObjectURL(generatedFile),
+          preview: null,
+          cut: null,
+          flags: [],
+          state: "queued",
+          angle,
+        };
+        setShots((list) => [...list, generatedShot]);
+      }
+      setAngleStatus("");
+      setMessage(`Generated ${angleTargets.length} new angle view(s). They are being cleaned and will be included in your ZIP.`);
+    } catch (error) {
+      setAngleStatus("");
+      setMessage(error instanceof Error ? error.message : "Could not generate the additional product angles.");
+    } finally {
+      setGeneratingAngles(false);
+    }
+  };
 
   const remove = (id: string) =>
     setShots((list) => {
@@ -191,7 +267,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
             <ImagePlus size={22} aria-hidden />
           </span>
           <span className="font-display text-base font-medium text-ink">Drop product photos here, or choose files</span>
-          <span className="max-w-md text-[13px] leading-relaxed text-mute">{mode === "shots" ? "JPEG, PNG or WebP. FLOW removes the background locally and places the original product pixels on pure white. No AI redraw or invented product angles." : "JPEG, PNG or WebP. FLOW removes the background locally and exports on pure white. No AI quota is needed for cleanup."}</span>
+          <span className="max-w-md text-[13px] leading-relaxed text-mute">{mode === "shots" ? "JPEG, PNG or WebP. Cleanup and pure-white background removal run locally in your browser. The reference photo is sent to your selected AI provider only when you generate new angles." : "JPEG, PNG or WebP. FLOW removes the background locally and exports on pure white. No AI quota is needed for cleanup."}</span>
           <input type="file" accept="image/*" multiple className="sr-only" onChange={(e) => { add(e.target.files); e.target.value = ""; }} />
         </label>
 
@@ -259,8 +335,8 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
         <div>
           <h2 className="h-section">{mode === "cleanup" ? "Output" : "Product and marketplaces"}</h2>
           <p className="mt-1 text-[13px] leading-relaxed text-mute">
-            {mode === "cleanup" ? "Background removal runs locally. FLOW keeps the original product photo and exports it on pure white. " : "E-commerce export keeps the original product view and removes only the background locally. Upload genuine photos from other sides if you need side or back listing images. "}
-            FLOW does not use text-to-image AI to redraw products, labels or packaging. One source photo can produce a main image, not a truthful new side or back view.
+            {mode === "cleanup" ? "Gemini studio retouch: improve product lighting, sharpness and photographic quality while preserving the exact item, then remove the background and export on pure white at 2000 × 2000. " : "Upload one clear Front photo, choose Side, Back or Detail, and generate new AI angle views from the same product reference. "}
+            Background removal runs locally in your browser. AI first analyzes the reference photo with OpenRouter Nemotron Vision, then Google Gemini or OpenAI edits the supplied photo. OpenRouter text-to-image models cannot preserve an uploaded product reference.
           </p>
         </div>
 
@@ -271,8 +347,22 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
               <input id="im-sku" className="field" value={sku} maxLength={40} placeholder="Used in the file names" autoComplete="off" onChange={(e) => setSku(e.target.value)} />
             </div>
             <div className="rounded-xl border border-line bg-sage-soft p-3.5">
-              <h3 className="text-sm font-semibold text-ink">Product accuracy mode</h3>
-              <p className="mt-1 text-xs leading-relaxed text-mute">Your uploaded photo stays the source of truth. FLOW removes the background locally and exports the same view on pure white — it will not invent a side or back view, redraw the packaging, or alter label text. For additional marketplace angles, upload real photos of those sides and assign each photo its correct angle.</p>
+              <h3 className="text-sm font-semibold text-ink">Generate other product angles</h3>
+              <p className="mt-1 text-xs leading-relaxed text-mute">FLOW first analyzes your Front photo with Nemotron Vision, then sends the original photo plus the analysis and fixed studio-style prompt to Google Gemini or OpenAI for editing. OpenRouter text-to-image is not used for reference editing.</p>
+              <div className="mt-3 flex flex-wrap gap-3">
+                {(["side", "back", "detail"] as const).map((angle) => (
+                  <label key={angle} className="flex items-center gap-2 text-sm text-ink">
+                    <input type="checkbox" className="size-4 accent-flow-green" checked={angleTargets.includes(angle)} onChange={(event) => setAngleTargets((current) => event.target.checked ? [...current, angle] : current.filter((item) => item !== angle))} />
+                    {ANGLE_LABEL[angle]}
+                  </label>
+                ))}
+              </div>
+              <button type="button" className="btn btn-primary mt-3 w-full" onClick={generateAngles} disabled={shots.length === 0 || angleTargets.length === 0 || generatingAngles}>
+                {generatingAngles ? <Loader2 size={16} className="animate-spin" aria-hidden /> : <ImagePlus size={16} aria-hidden />}
+                {generatingAngles ? "Generating angles…" : "Generate selected angles"}
+              </button>
+              {angleStatus && <p role="status" className="mt-2 text-xs text-mute">{angleStatus}</p>}
+              <p className="mt-2 text-[11px] leading-relaxed text-mute">Important: views of hidden packaging surfaces are AI reconstructions. Check any unseen label text before publishing.</p>
             </div>
             <fieldset className="min-w-0">
               <legend className="label">Export for</legend>
