@@ -81,6 +81,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
   const patch = (id: string, p: Partial<Shot>) => setShots((list) => list.map((s) => (s.id === id ? { ...s, ...p } : s)));
   const removeWithPixelcut = async (shot: Shot) => {
     if (pixelcutBusy.includes(shot.id)) return;
+    if (!window.confirm("Pixelcut background removal may consume 5 API credits (about $0.05) for this image. Continue?")) return;
     setPixelcutBusy((list) => [...list, shot.id]);
     setMessage("");
     try {
@@ -123,7 +124,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
         const cut = await cutout(next.file, settings.current.tolerance);
         const blob = await toJpeg(compose(cut, 720, settings.current.fill / 100), 0.88);
         if (next.preview) URL.revokeObjectURL(next.preview);
-        patch(next.id, { state: "done", cut, flags: cut.flags, preview: URL.createObjectURL(blob) });
+        patch(next.id, { state: "done", cut, pixelcutBlob: undefined, flags: cut.flags, preview: URL.createObjectURL(blob) });
         setModelError(false);
       } catch (e) {
         if (e instanceof ModelLoadError) setModelError(true);
