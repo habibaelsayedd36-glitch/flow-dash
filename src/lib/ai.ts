@@ -19,7 +19,7 @@ export const PROVIDERS: Record<ProviderId, { label: string; defaultModel: string
   openai: { label: "OpenAI", defaultModel: "gpt-5-mini" },
   gemini: { label: "Google Gemini", defaultModel: "gemini-3.8-flash" },
   groq: { label: "Groq (Free)", defaultModel: "openai/gpt-oss-120b" },
-  openrouter: { label: "OpenRouter", defaultModel: "openai/gpt-4.1-mini" },
+  openrouter: { label: "OpenRouter", defaultModel: "openai/gpt-4o" },
 };
 export const isProviderId = (v: unknown): v is ProviderId => typeof v === "string" && v in PROVIDERS;
 
@@ -304,7 +304,7 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
     const endpoint = p.id === "groq" ? "https://api.groq.com/openai/v1/chat/completions" : p.id === "openrouter" ? "https://openrouter.ai/api/v1/chat/completions" : "https://api.openai.com/v1/chat/completions";
     const requestChat = (model: string) => post(
       endpoint,
-      { authorization: `Bearer ${p.key}` },
+      { authorization: `Bearer ${p.key}`, ...(p.id === "openrouter" ? { "HTTP-Referer": process.env.NEXT_PUBLIC_SITE_URL || "https://flow-dash-drab.vercel.app", "X-Title": "FLOW Workspace" } : {}) },
       {
         model,
         // GPT-OSS spends completion tokens on hidden reasoning before visible copy.
