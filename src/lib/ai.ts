@@ -19,7 +19,7 @@ export const PROVIDERS: Record<ProviderId, { label: string; defaultModel: string
   openai: { label: "OpenAI", defaultModel: "gpt-5-mini" },
   gemini: { label: "Google Gemini", defaultModel: "gemini-3.8-flash" },
   groq: { label: "Groq (Free)", defaultModel: "openai/gpt-oss-120b" },
-  openrouter: { label: "OpenRouter", defaultModel: "openai/gpt-4o" },
+  openrouter: { label: "OpenRouter (Free)", defaultModel: "baidu/ernie-5.5-flash-preview:free" },
 };
 export const isProviderId = (v: unknown): v is ProviderId => typeof v === "string" && v in PROVIDERS;
 
@@ -41,7 +41,12 @@ export async function getAiProvider(): Promise<AiProvider | null> {
     const id = get("ai_provider");
     const key = get("ai_key");
     if (isProviderId(id) && key) {
-      return { id, label: PROVIDERS[id].label, model: get("ai_model") || PROVIDERS[id].defaultModel, key, source: "settings" };
+      const savedModel = get("ai_model");
+      // Replace the previous paid OpenRouter default for existing accounts too.
+      const model = id === "openrouter" && (!savedModel || savedModel === "openai/gpt-4o")
+        ? PROVIDERS.openrouter.defaultModel
+        : savedModel || PROVIDERS[id].defaultModel;
+      return { id, label: PROVIDERS[id].label, model, key, source: "settings" };
     }
   } catch {
     // settings table not ready yet
@@ -308,6 +313,7 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
       {
         model,
         // GPT-OSS spends completion tokens on hidden reasoning before visible copy.
+        ...(p.id === "openrouter" ? { max_tokens: 4000 } : {}),
         ...(p.id === "groq"
           ? {
               max_completion_tokens: model.includes("gpt-oss") ? 4096 : 1800,
