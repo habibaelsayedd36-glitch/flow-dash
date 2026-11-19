@@ -28,6 +28,15 @@ export async function getOpenRouterVisionKey(): Promise<string> {
   }
 }
 
+export async function getPixelAiKey(): Promise<string> {
+  try {
+    const rows = await db.select().from(settings).where(inArray(settings.key, ["pixelai_api_key"]));
+    return rows.find((row) => row.key === "pixelai_api_key")?.value.trim() ?? "";
+  } catch {
+    return "";
+  }
+}
+
 export async function getAiProvider(): Promise<AiProvider | null> {
   const envKey = process.env.OPENROUTER_API_KEY;
   const envModel = process.env.AI_MODEL?.trim() ?? "";
