@@ -11,7 +11,7 @@ import { RULES, type ListingContent, type ProductBrief } from "./rules";
  * and callers fall back to the template engine — nothing here fabricates output.
  */
 
-export type ProviderId = "anthropic" | "openai" | "gemini" | "groq";
+export type ProviderId = "anthropic" | "openai" | "gemini" | "groq" | "openrouter";
 export type AiProvider = { id: ProviderId; label: string; model: string; key: string; source: "env" | "settings" };
 
 export const PROVIDERS: Record<ProviderId, { label: string; defaultModel: string }> = {
@@ -19,6 +19,7 @@ export const PROVIDERS: Record<ProviderId, { label: string; defaultModel: string
   openai: { label: "OpenAI", defaultModel: "gpt-5-mini" },
   gemini: { label: "Google Gemini", defaultModel: "gemini-3.8-flash" },
   groq: { label: "Groq (Free)", defaultModel: "openai/gpt-oss-120b" },
+  openrouter: { label: "OpenRouter", defaultModel: "openai/gpt-4.1-mini" },
 };
 export const isProviderId = (v: unknown): v is ProviderId => typeof v === "string" && v in PROVIDERS;
 
@@ -29,6 +30,7 @@ export async function getAiProvider(): Promise<AiProvider | null> {
     ["openai", process.env.OPENAI_API_KEY],
     ["gemini", process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY],
     ["groq", process.env.GROQ_API_KEY],
+    ["openrouter", process.env.OPENROUTER_API_KEY],
   ];
   for (const [id, key] of env) {
     if (key) return { id, label: PROVIDERS[id].label, model: override || PROVIDERS[id].defaultModel, key, source: "env" };
@@ -298,8 +300,8 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
       p.label,
     )) as { content?: { type: string; text?: string }[] };
     text = (data.content ?? []).filter((b) => b.type === "text").map((b) => b.text ?? "").join("");
-  } else if (p.id === "openai" || p.id === "groq") {
-    const endpoint = p.id === "groq" ? "https://api.groq.com/openai/v1/chat/completions" : "https://api.openai.com/v1/chat/completions";
+  } else if (p.id === "openai" || p.id === "groq" || p.id === "openrouter") {
+    const endpoint = p.id === "groq" ? "https://api.groq.com/openai/v1/chat/completions" : p.id === "openrouter" ? "https://openrouter.ai/api/v1/chat/completions" : "https://api.openai.com/v1/chat/completions";
     const requestChat = (model: string) => post(
       endpoint,
       { authorization: `Bearer ${p.key}` },
