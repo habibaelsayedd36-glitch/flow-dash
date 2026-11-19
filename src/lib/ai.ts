@@ -329,35 +329,68 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
       p.label,
     );
     let data: { choices?: { finish_reason?: string; message?: { content?: string } }[]; usage?: { completion_tokens?: number; completion_tokens_details?: { reasoning_tokens?: number } } } | undefined;
-    try {
-      data = (await requestChat(p.model)) as typeof data;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      const retryableFailure = ["(429):", "(500):", "(502):", "(503):", "(504):"].some((status) => message.includes(status));
-      if (p.id !== "groq" || !retryableFailure || p.model === "qwen/qwen3.8-27b") throw error;
-
-      // GPT-OSS 120B and 20B share the same free-tier daily token ceiling.
-      // When the error is a daily-token cap, skip 20B and go straight to Qwen,
-      // which has a separate model quota. For short-window errors, try 20B first.
-      // Keep the same connected Groq key; no additional API key is required.
-      const dailyTokenLimit = /tokens per day|daily token|TPD/i.test(message);
-      const fallbacks = p.model === "openai/gpt-oss-120b"
-        ? dailyTokenLimit
-          ? ["qwen/qwen3.8-27b", "openai/gpt-oss-20b"]
-          : ["openai/gpt-oss-20b", "qwen/qwen3.8-27b"]
-        : ["qwen/qwen3.8-27b"];
-      let lastError: unknown = error;
-      let recovered = false;
-      for (const fallbackModel of fallbacks) {
+    if (p.id === "openrouter" && (p.model.endsWith(":free") || p.model === "openrouter/free")) {
+      // Keep free-tier requests moving when one provider/model is rate-limited
+      // or temporarily unavailable. All candidates are free OpenRouter models.
+      const freeModels = Array.from(new Set([
+        p.model,
+        "baidu/ernie-5.5-flash-preview:free",
+        "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "thinkingmachines/inkling-2-small:free",
+        "inclusionai/ling-3.2-flash:free",
+        "openrouter/free",
+      ]));
+      let lastError: unknown;
+      let completed = false;
+      for (const model of freeModels) {
         try {
-          data = (await requestChat(fallbackModel)) as typeof data;
-          recovered = true;
+          data = (await requestChat(model)) as typeof data;
+          completed = true;
           break;
-        } catch (fallbackError) {
-          lastError = fallbackError;
+        } catch (error) {
+          lastError = error;
+          const message = error instanceof Error ? error.message : String(error);
+          const canTryAnotherFreeModel =
+            ["(402):", "(404):", "(429):", "(502):", "(503):", "(504):"].some((status) => message.includes(status)) ||
+            /no endpoints available|model is unavailable|provider is unavailable|rate.?limit|quota exceeded|temporarily unavailable/i.test(message);
+          if (!canTryAnotherFreeModel) throw error;
         }
       }
-      if (!recovered) throw lastError;
+      if (!completed) {
+        const lastMessage = lastError instanceof Error ? lastError.message : String(lastError ?? "");
+        throw new Error(`OpenRouter: all configured free models are currently unavailable or rate-limited. Try again later. Last error: ${lastMessage}`);
+      }
+    } else {
+      try {
+        data = (await requestChat(p.model)) as typeof data;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const retryableFailure = ["(429):", "(500):", "(502):", "(503):", "(504):"].some((status) => message.includes(status));
+        if (p.id !== "groq" || !retryableFailure || p.model === "qwen/qwen3.8-27b") throw error;
+
+        // GPT-OSS 120B and 20B share the same free-tier daily token ceiling.
+        // When the error is a daily-token cap, skip 20B and go straight to Qwen,
+        // which has a separate model quota. For short-window errors, try 20B first.
+        // Keep the same connected Groq key; no additional API key is required.
+        const dailyTokenLimit = /tokens per day|daily token|TPD/i.test(message);
+        const fallbacks = p.model === "openai/gpt-oss-120b"
+          ? dailyTokenLimit
+            ? ["qwen/qwen3.8-27b", "openai/gpt-oss-20b"]
+            : ["openai/gpt-oss-20b", "qwen/qwen3.8-27b"]
+          : ["qwen/qwen3.8-27b"];
+        let lastError: unknown = error;
+        let recovered = false;
+        for (const fallbackModel of fallbacks) {
+          try {
+            data = (await requestChat(fallbackModel)) as typeof data;
+            recovered = true;
+            break;
+          } catch (fallbackError) {
+            lastError = fallbackError;
+          }
+        }
+        if (!recovered) throw lastError;
+      }
     }
     const choice = data?.choices?.[0];
     text = choice?.message?.content ?? "";
