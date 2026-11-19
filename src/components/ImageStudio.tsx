@@ -286,7 +286,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
             <ImagePlus size={22} aria-hidden />
           </span>
           <span className="font-display text-base font-medium text-ink">Drop product photos here, or choose files</span>
-          <span className="max-w-md text-[13px] leading-relaxed text-mute">{mode === "shots" ? "JPEG, PNG or WebP. Cleanup runs locally; the selected reference photo is sent securely to Gemini only when you generate new AI angles." : "JPEG, PNG or WebP. Gemini professionally retouches the product photo, then FLOW removes the background locally and exports it on pure white."}</span>
+          <span className="max-w-md text-[13px] leading-relaxed text-mute">{mode === "shots" ? "JPEG, PNG or WebP. Cleanup and pure-white background removal run locally in your browser. The reference photo is sent to your selected AI provider only when you generate new angles." : "JPEG, PNG or WebP. FLOW removes the background locally and exports on pure white. No AI quota is needed for cleanup."}</span>
           <input type="file" accept="image/*" multiple className="sr-only" onChange={(e) => { add(e.target.files); e.target.value = ""; }} />
         </label>
 
@@ -355,7 +355,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
           <h2 className="h-section">{mode === "cleanup" ? "Output" : "Product and marketplaces"}</h2>
           <p className="mt-1 text-[13px] leading-relaxed text-mute">
             {mode === "cleanup" ? "Gemini studio retouch: improve product lighting, sharpness and photographic quality while preserving the exact item, then remove the background and export on pure white at 2000 × 2000. " : "Upload one clear Front photo, choose Side, Back or Detail, and generate new AI angle views from the same product reference. "}
-            Background removal runs locally in your browser. Gemini is used only for generating new angle views; allow a little extra time for each view.
+            Background removal runs locally in your browser. AI is used only when generating new angle views; select Google Gemini or OpenAI in Settings & AI Key.
           </p>
         </div>
 
@@ -367,7 +367,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
             </div>
             <div className="rounded-xl border border-line bg-sage-soft p-3.5">
               <h3 className="text-sm font-semibold text-ink">Generate other product angles</h3>
-              <p className="mt-1 text-xs leading-relaxed text-mute">Use your Front photo as the reference. Gemini creates professional studio-quality Side, Back and Detail views on pure white, then FLOW cleans and exports them.</p>
+              <p className="mt-1 text-xs leading-relaxed text-mute">Use your Front photo as the reference. Your selected AI provider creates professional studio-quality Side, Back and Detail views on pure white, then FLOW cleans and exports them.</p>
               <div className="mt-3 flex flex-wrap gap-3">
                 {(["side", "back", "detail"] as const).map((angle) => (
                   <label key={angle} className="flex items-center gap-2 text-sm text-ink">
