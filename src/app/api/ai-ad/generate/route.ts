@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
     if (provider.id === "openai") {
       const imageBytes = Buffer.from(image_b64, "base64");
       const form = new FormData();
-      form.append("model", provider.model || "gpt-image-2");
+      form.append("model", provider.model.startsWith("gpt-image-") ? provider.model : "gpt-image-2");
       form.append("prompt", prompt);
       form.append("size", "1024x1024");
       form.append("quality", "high");
