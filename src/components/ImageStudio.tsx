@@ -38,6 +38,34 @@ async function imageAsBase64(file: File): Promise<string> {
   return btoa(binary);
 }
 
+function enhancementPrompt(): string {
+  return [
+    "Act as a world-class commercial product photographer and professional ecommerce image retoucher.",
+    "Retouch the exact product in the supplied photograph into a premium, photorealistic studio catalog image.",
+    "Preserve the exact physical product: identity, silhouette, dimensions, proportions, packaging, label, typography, logo, colors, materials, finish, cap, pump and every visible detail. Do not redesign, replace, reconstruct, add, remove or invent any product feature or text.",
+    "Improve only photographic quality: professional softbox studio lighting, balanced exposure, clean accurate white balance, crisp focus, fine-detail clarity, natural realistic reflections, controlled highlights, true-to-life color and a subtle natural contact shadow.",
+    "Keep the camera view and product orientation from the input photograph. Do not invent another angle or reveal hidden sides.",
+    "Place the product upright and centered on a perfectly uniform pure white #FFFFFF background, edge to edge. No grey cast, gradient, props, hands, scenery, extra objects, text overlays, border or watermark.",
+    "One product only. Square 1:1 premium commercial product photography, sharp clean edges, high-end professional retouching.",
+  ].join(" ");
+}
+
+async function geminiProductEdit(file: File, prompt: string): Promise<File> {
+  const image_b64 = await imageAsBase64(file);
+  const response = await fetch("/api/ai-ad/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt, image_b64, image_type: "image/png" }),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload.error || "Gemini could not retouch this product photo.");
+  }
+  const blob = await response.blob();
+  if (!blob.size || !blob.type.startsWith("image/")) throw new Error("Gemini returned an invalid product image.");
+  return new File([blob], file.name.replace(/\.[^.]+$/, "") + "-studio.png", { type: blob.type });
+}
+
 function anglePrompt(angle: Exclude<Angle, "front">): string {
   const view = {
     side: "Create a true 90-degree side profile view, showing the product's side silhouette, depth and real construction.",
@@ -88,7 +116,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
       patch(next.id, { state: "working" });
       await new Promise((r) => setTimeout(r, 30));
       try {
-        const cut = await cutout(next.file, settings.current.tolerance);
+        const photoForCutout = mode === "cleanup" ? await geminiProductEdit(next.file, enhancementPrompt()) : next.file;\n        const cut = await cutout(photoForCutout, settings.current.tolerance);
         const blob = await toJpeg(compose(cut, 720, settings.current.fill / 100), 0.88);
         if (next.preview) URL.revokeObjectURL(next.preview);
         patch(next.id, { state: "done", cut, flags: cut.flags, preview: URL.createObjectURL(blob) });
@@ -257,7 +285,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
             <ImagePlus size={22} aria-hidden />
           </span>
           <span className="font-display text-base font-medium text-ink">Drop product photos here, or choose files</span>
-          <span className="max-w-md text-[13px] leading-relaxed text-mute">{mode === "shots" ? "JPEG, PNG or WebP. Cleanup runs locally; the selected reference photo is sent securely to Gemini only when you generate new AI angles." : "JPEG, PNG or WebP. Photos are processed in your browser and never leave this computer."}</span>
+          <span className="max-w-md text-[13px] leading-relaxed text-mute">{mode === "shots" ? "JPEG, PNG or WebP. Cleanup runs locally; the selected reference photo is sent securely to Gemini only when you generate new AI angles." : "JPEG, PNG or WebP. Gemini professionally retouches the product photo, then FLOW removes the background locally and exports it on pure white."}</span>
           <input type="file" accept="image/*" multiple className="sr-only" onChange={(e) => { add(e.target.files); e.target.value = ""; }} />
         </label>
 
@@ -325,7 +353,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
         <div>
           <h2 className="h-section">{mode === "cleanup" ? "Output" : "Product and marketplaces"}</h2>
           <p className="mt-1 text-[13px] leading-relaxed text-mute">
-            {mode === "cleanup" ? "Automatic Amazon main-image cleanup: remove the background, center the original product on pure white, and export a 2000 × 2000 image with the product filling 85% of the frame. " : "Upload one clear Front photo, choose Side, Back or Detail, and generate new AI angle views from the same product reference. "}
+            {mode === "cleanup" ? "Gemini studio retouch: improve product lighting, sharpness and photographic quality while preserving the exact item, then remove the background and export on pure white at 2000 × 2000. " : "Upload one clear Front photo, choose Side, Back or Detail, and generate new AI angle views from the same product reference. "}
             Background removal runs locally in your browser. Gemini is used only for generating new angle views; allow a little extra time for each view.
           </p>
         </div>
