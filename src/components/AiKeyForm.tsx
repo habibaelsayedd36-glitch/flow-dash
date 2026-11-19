@@ -2,12 +2,12 @@
 
 import { Check, KeyRound, Loader2, PlugZap, Trash2, X } from "lucide-react";
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
-import { removeAiKeyAction, saveAiKeyAction, saveOpenRouterVisionKeyAction, testAiAction, type KeyState } from "@/app/actions-tools";
+import { removeAiKeyAction, saveAiKeyAction, saveOpenRouterVisionKeyAction, savePixelAiKeyAction, testAiAction, type KeyState } from "@/app/actions-tools";
 
 type ProviderOpt = { id: string; label: string; defaultModel: string };
 type Current = { id: string; label: string; model: string; masked: string; source: "env" | "settings" } | null;
 
-export function AiKeyForm({ providers, current, visionMasked }: { providers: ProviderOpt[]; current: Current; visionMasked: string }) {
+export function AiKeyForm({ providers, current, visionMasked, pixelAiMasked }: { providers: ProviderOpt[]; current: Current; visionMasked: string; pixelAiMasked: string }) {
   const [provider, setProvider] = useState(current?.id ?? providers[0].id);
   const [state, action, saving] = useActionState<KeyState, FormData>(saveAiKeyAction, {});
   const [test, setTest] = useState<{ ok: boolean; message: string } | null>(null);
@@ -110,6 +110,18 @@ export function AiKeyForm({ providers, current, visionMasked }: { providers: Pro
         <form action={saveOpenRouterVisionKeyAction} className="mt-3 flex flex-col gap-2 sm:flex-row">
           <input name="openrouterVisionKey" type="password" className="field min-w-0 flex-1" placeholder={visionMasked ? "Paste a new key to replace it" : "Paste OpenRouter API key"} autoComplete="off" spellCheck={false} />
           <button type="submit" className="btn btn-secondary">Save analysis key</button>
+        </form>
+      </div>
+
+      <div className="mt-5 border-t border-line pt-5">
+        <h3 className="text-sm font-semibold text-ink">PixelAI image tools</h3>
+        <p className="mt-1 text-[13px] leading-relaxed text-mute">
+          Save your PixelAI API key here for the image workflow. The key is stored on the server and masked in the dashboard.
+          {pixelAiMasked ? <> Saved key: <span className="num text-ink">{pixelAiMasked}</span>.</> : " No PixelAI key saved yet."}
+        </p>
+        <form action={savePixelAiKeyAction} className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <input name="pixelAiKey" type="password" className="field min-w-0 flex-1" placeholder={pixelAiMasked ? "Paste a new PixelAI key to replace it" : "Paste PixelAI API key"} autoComplete="off" spellCheck={false} />
+          <button type="submit" className="btn btn-secondary">Save PixelAI key</button>
         </form>
       </div>
 
