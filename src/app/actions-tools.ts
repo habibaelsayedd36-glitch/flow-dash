@@ -52,7 +52,7 @@ export async function saveOpenRouterVisionKeyAction(fd: FormData): Promise<void>
   await requireUser();
   await ensureDb();
   const key = String(fd.get("openrouterVisionKey") ?? "").trim();
-  if (key && (key.length < 16 || key.length > 300 || /\\s/.test(key))) {
+  if (key && (key.length < 16 || key.length > 300 || /\s/.test(key))) {
     throw new Error("That does not look like an OpenRouter API key.");
   }
   if (key) await setSetting("openrouter_vision_key", key);
