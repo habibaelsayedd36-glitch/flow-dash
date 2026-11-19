@@ -34,13 +34,14 @@ export async function saveAiKeyAction(_prev: KeyState, fd: FormData): Promise<Ke
   const provider = String(fd.get("provider") ?? "");
   const key = String(fd.get("key") ?? "").trim();
   const model = String(fd.get("model") ?? "").trim().slice(0, 80);
-  if (!isProviderId(provider)) return { error: "Choose a provider." };
+  if (provider !== "openrouter" || !isProviderId(provider)) return { error: "FLOW Free mode only supports OpenRouter free models." };
   const existing = await db.select().from(settings).where(eq(settings.key, "ai_key"));
   if (!key && !existing[0]?.value) return { error: "Paste your API key." };
   if (key && (key.length < 16 || key.length > 300 || /\s/.test(key))) return { error: "That does not look like an API key." };
   await setSetting("ai_provider", provider);
   if (key) await setSetting("ai_key", key);
-  await setSetting("ai_model", model);
+  const freeModel = model.endsWith(":free") || model === "openrouter/free" ? model : "baidu/ernie-5.5-flash-preview:free";
+  await setSetting("ai_model", freeModel);
   refresh();
   return { ok: true };
 }
