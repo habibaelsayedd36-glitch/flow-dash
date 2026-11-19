@@ -35,8 +35,10 @@ export async function saveAiKeyAction(_prev: KeyState, fd: FormData): Promise<Ke
   const key = String(fd.get("key") ?? "").trim();
   const model = String(fd.get("model") ?? "").trim().slice(0, 80);
   if (provider !== "openrouter" || !isProviderId(provider)) return { error: "FLOW Free mode only supports OpenRouter free models." };
-  const existing = await db.select().from(settings).where(eq(settings.key, "ai_key"));
-  if (!key && !existing[0]?.value) return { error: "Paste your API key." };
+  const existing = await db.select().from(settings).where(inArray(settings.key, ["ai_provider", "ai_key"]));
+  const existingProvider = existing.find((row) => row.key === "ai_provider")?.value ?? "";
+  const existingKey = existing.find((row) => row.key === "ai_key")?.value ?? "";
+  if (!key && (!existingKey || existingProvider !== provider)) return { error: "Paste your OpenRouter API key. A key saved for another provider cannot be reused here." };
   if (key && (key.length < 16 || key.length > 300 || /\s/.test(key))) return { error: "That does not look like an API key." };
   await setSetting("ai_provider", provider);
   if (key) await setSetting("ai_key", key);
