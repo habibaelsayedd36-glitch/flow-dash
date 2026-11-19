@@ -30,8 +30,8 @@ export async function getOpenRouterVisionKey(): Promise<string> {
 
 export async function getPixelAiKey(): Promise<string> {
   try {
-    const rows = await db.select().from(settings).where(inArray(settings.key, ["pixelai_api_key"]));
-    return rows.find((row) => row.key === "pixelai_api_key")?.value.trim() ?? "";
+    const rows = await db.select().from(settings).where(inArray(settings.key, ["pixelcut_api_key"]));
+    return rows.find((row) => row.key === "pixelcut_api_key")?.value.trim() ?? "";
   } catch {
     return "";
   }
