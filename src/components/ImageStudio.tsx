@@ -116,7 +116,8 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
       patch(next.id, { state: "working" });
       await new Promise((r) => setTimeout(r, 30));
       try {
-        const photoForCutout = mode === "cleanup" ? await geminiProductEdit(next.file, enhancementPrompt()) : next.file;\n        const cut = await cutout(photoForCutout, settings.current.tolerance);
+        const photoForCutout = mode === "cleanup" ? await geminiProductEdit(next.file, enhancementPrompt()) : next.file;
+        const cut = await cutout(photoForCutout, settings.current.tolerance);
         const blob = await toJpeg(compose(cut, 720, settings.current.fill / 100), 0.88);
         if (next.preview) URL.revokeObjectURL(next.preview);
         patch(next.id, { state: "done", cut, flags: cut.flags, preview: URL.createObjectURL(blob) });
