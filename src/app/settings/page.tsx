@@ -75,7 +75,7 @@ export default async function SettingsPage() {
               <li>Workflow Engine: the rule that drafts a listing when a product reaches Listing optimization.</li>
               <li>Reviews & Health: reply drafts, which a person edits and posts.</li>
             </ul>
-            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">Image Clean-up and Image Angles do not use the key. They run in your browser.</p>
+            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">Image Clean-up runs locally in your browser and does not use an AI key. Image Angles uses the selected Google Gemini or OpenAI key.</p>
           </section>
 
           <aside className="flex gap-3 rounded-2xl border border-amber-300 bg-amber-soft p-4 sm:p-5">
