@@ -382,15 +382,16 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
       const quotaExceeded = message.includes("(429):") && /generate_content_free_tier_requests|quota exceeded|requests per day/i.test(message);
       if (!retiredModel && !overloaded && !quotaExceeded) throw error;
 
-      // A daily free-tier request cap will not clear with a short retry. Try
-      // alternate Gemini models, whose per-model request quotas may still be available.
+      // A daily free-tier request cap will not clear with a short retry.
+      // Try other currently supported Gemini models with independent model quotas.
+      // Prefer strong Flash models for bilingual marketplace listing quality,
+      // then use Flash-Lite as the low-cost final Gemini-only fallback.
+      const geminiFallbacks = ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-2.5-flash-lite"];
       const fallbacks = retiredModel
-        ? ["gemini-3.8-flash", "gemini-3.5-flash-lite"]
-        : quotaExceeded
-          ? ["gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-3.8-flash"]
-          : primaryModel === "gemini-3.8-flash"
-            ? ["gemini-3.5-flash-lite", "gemini-3.6-flash"]
-            : ["gemini-3.8-flash", "gemini-3.5-flash-lite"];
+        ? ["gemini-3.8-flash", ...geminiFallbacks]
+        : quotaExceeded || overloaded
+          ? geminiFallbacks
+          : ["gemini-3.8-flash", ...geminiFallbacks];
       let lastError: unknown = error;
       let recovered = false;
       for (const fallbackModel of [...new Set(fallbacks)].filter((model) => model !== primaryModel)) {
