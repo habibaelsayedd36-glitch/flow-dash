@@ -1,7 +1,4 @@
 import { ShieldAlert } from "lucide-react";
-import { eq } from "drizzle-orm";
-import { db } from "@/db";
-import { settings } from "@/db/schema";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { AiKeyForm } from "@/components/AiKeyForm";
@@ -23,15 +20,14 @@ const SAMPLE = `{
 }`;
 
 export default async function SettingsPage() {
-  const [provider, h, visionRows] = await Promise.all([getAiProvider(), headers(), db.select().from(settings).where(eq(settings.key, "openrouter_vision_key"))]);
-  const visionKey = visionRows[0]?.value ?? "";
+  const [provider, h] = await Promise.all([getAiProvider(), headers()]);
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "your-dashboard-address";
   const endpoint = `${h.get("x-forwarded-proto") ?? "https"}://${host}/api/leads`;
   const code = "mt-1.5 overflow-x-auto rounded-xl bg-flow-bg-soft px-4 py-3 font-mono text-[13px] leading-relaxed text-foreground";
 
   return (
     <>
-      <PageHeader title="Settings & AI Key" sub="Connect the AI model that writes for you, and the website form that feeds the Leads Inbox." />
+      <PageHeader title="Settings & AI Key" sub="Connect a free AI model for listing copy and product analysis, and configure the website form that feeds the Leads Inbox." />
 
       <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="flex min-w-0 flex-col gap-4">
@@ -80,7 +76,7 @@ export default async function SettingsPage() {
               <li>Workflow Engine: the rule that drafts a listing when a product reaches Listing optimization.</li>
               <li>Reviews & Health: reply drafts, which a person edits and posts.</li>
             </ul>
-            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">Image Clean-up runs locally in your browser and does not use an AI key. Nemotron Vision on OpenRouter can analyze a product reference photo before Gemini or OpenAI edits it. OpenRouter text-to-image generation is not used for reference-preserving Image Angles.</p>
+            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">Image Clean-up runs locally in your browser and does not use an AI key. Product photo analysis can use a free OpenRouter vision model. Generating new Side, Back or Detail views from a reference photo is disabled in Free mode because available free models cannot reliably preserve the exact product while editing it.</p>
           </section>
 
           <aside className="flex gap-3 rounded-2xl border border-amber-300 bg-amber-soft p-4 sm:p-5">
@@ -88,8 +84,7 @@ export default async function SettingsPage() {
             <div className="text-sm leading-relaxed text-amber-900">
               <h2 className="text-sm text-amber-ink">This dashboard has no login yet</h2>
               <p className="mt-1">
-                The key is stored on the server and never sent back to the browser, but anyone who has the dashboard link can spend its quota or replace it. Keep the link private and set
-                a spending limit with your provider.
+                The key is stored on the server and never sent back to the browser, but anyone who has the dashboard link can use its free quota or replace it. Keep the link private and monitor your provider limits.
               </p>
             </div>
           </aside>
