@@ -75,7 +75,7 @@ export default async function SettingsPage() {
               <li>Workflow Engine: the rule that drafts a listing when a product reaches Listing optimization.</li>
               <li>Reviews & Health: reply drafts, which a person edits and posts.</li>
             </ul>
-            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">Image Clean-up runs locally in your browser and does not use an AI key. OpenRouter works for text and listing generation; Image Angles currently requires a Google Gemini or OpenAI image model.</p>
+            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">Image Clean-up runs locally in your browser and does not use an AI key. OpenRouter also supports free Recraft image generation in Image Angles. Unlike Gemini and OpenAI image editing, this text-to-image endpoint does not use the uploaded reference photo, so it cannot guarantee the exact same product packaging or label.</p>
           </section>
 
           <aside className="flex gap-3 rounded-2xl border border-amber-300 bg-amber-soft p-4 sm:p-5">
