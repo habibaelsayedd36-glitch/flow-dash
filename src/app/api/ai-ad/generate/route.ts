@@ -11,9 +11,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const provider = await getAiProvider();
-    if (!provider || !["gemini", "openai"].includes(provider.id)) {
+    if (!provider || !["gemini", "openai", "openrouter"].includes(provider.id)) {
       return NextResponse.json(
-        { error: "Choose Google Gemini or OpenAI in FLOW Settings & AI Key and save its API key before generating product angles." },
+        { error: "Choose Google Gemini, OpenAI or OpenRouter in FLOW Settings & AI Key and save its API key before generating product angles." },
         { status: 503 },
       );
     }
@@ -28,6 +28,40 @@ export async function POST(request: NextRequest) {
     }
     if (!image_b64 || image_b64.length > 12_000_000) {
       return NextResponse.json({ error: "Upload a product image smaller than 9 MB." }, { status: 400 });
+    }
+
+    if (provider.id === "openrouter") {
+      // OpenRouter's image-generation endpoint is text-to-image. It does not
+      // accept the uploaded reference photo, unlike Gemini/OpenAI image edits.
+      const upstream = await fetch("https://openrouter.ai/api/v1/images", {
+        method: "POST",
+        signal: AbortSignal.timeout(55_000),
+        headers: {
+          Authorization: `Bearer ${provider.key}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": process.env.NEXT_PUBLIC_SITE_URL || "https://flow-dash-drab.vercel.app",
+          "X-Title": "FLOW Workspace",
+        },
+        body: JSON.stringify({
+          model: "recraft/recraft-v4.1-flash-v2:free",
+          prompt,
+        }),
+        cache: "no-store",
+      });
+      const payload = await upstream.json().catch(() => null) as {
+        error?: { message?: string } | string;
+        data?: Array<{ b64_json?: string; url?: string }>;
+      } | null;
+      const imageData = payload?.data?.[0]?.b64_json;
+      if (!upstream.ok || !imageData) {
+        const detail = typeof payload?.error === "string" ? payload.error : payload?.error?.message;
+        return NextResponse.json(
+          { error: detail || `OpenRouter image generation failed (HTTP ${upstream.status}).` },
+          { status: upstream.status >= 400 && upstream.status < 600 ? upstream.status : 502 },
+        );
+      }
+      const image = Buffer.from(imageData, "base64");
+      return new NextResponse(image, { headers: { "Content-Type": "image/png", "Cache-Control": "no-store", "Content-Length": String(image.byteLength) } });
     }
 
     if (provider.id === "openai") {
