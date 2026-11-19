@@ -273,8 +273,8 @@ async function post(url: string, headers: Record<string, string>, body: unknown,
     if (!res.ok) {
       const err = (data as { error?: { message?: string } } | null)?.error?.message;
       const message = `${who} (${res.status}): ${err || res.statusText || "request failed"}`;
-      const dailyTokenLimit = /tokens per day|daily token|TPD/i.test(err || "");
-      if (retryable.has(res.status) && attempt < 2 && !dailyTokenLimit) {
+      const dailyQuotaLimit = /tokens per day|daily token|TPD|generate_content_free_tier_requests|requests per day|quota exceeded/i.test(err || "");
+      if (retryable.has(res.status) && attempt < 2 && !dailyQuotaLimit) {
         // Short-window limits can reset quickly; daily token caps cannot.
         // Do not waste retries waiting on a daily cap — let the model fallback run.
         await new Promise((resolve) => setTimeout(resolve, retryDelayMs(res, data, attempt)));
@@ -379,13 +379,18 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
       // overloaded, fail over to independent, supported Flash-Lite/Flash models.
       const retiredModel = message.includes("(404):") && /no longer available|not found|update your code/i.test(message);
       const overloaded = message.includes("(503):");
-      if (!retiredModel && !overloaded) throw error;
+      const quotaExceeded = message.includes("(429):") && /generate_content_free_tier_requests|quota exceeded|requests per day/i.test(message);
+      if (!retiredModel && !overloaded && !quotaExceeded) throw error;
 
+      // A daily free-tier request cap will not clear with a short retry. Try
+      // alternate Gemini models, whose per-model request quotas may still be available.
       const fallbacks = retiredModel
         ? ["gemini-3.8-flash", "gemini-3.5-flash-lite"]
-        : primaryModel === "gemini-3.8-flash"
-          ? ["gemini-3.5-flash-lite", "gemini-3.6-flash"]
-          : ["gemini-3.8-flash", "gemini-3.5-flash-lite"];
+        : quotaExceeded
+          ? ["gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-3.8-flash"]
+          : primaryModel === "gemini-3.8-flash"
+            ? ["gemini-3.5-flash-lite", "gemini-3.6-flash"]
+            : ["gemini-3.8-flash", "gemini-3.5-flash-lite"];
       let lastError: unknown = error;
       let recovered = false;
       for (const fallbackModel of [...new Set(fallbacks)].filter((model) => model !== primaryModel)) {
