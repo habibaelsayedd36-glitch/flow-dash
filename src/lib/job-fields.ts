@@ -54,7 +54,7 @@ export function suggestMapping(headers: string[]): Mapping {
 export function flagSummary(item: { estimated?: string[]; missing?: string[]; notes?: string[] }): string[] {
   const out: string[] = [];
   if (item.estimated?.length) out.push(`Estimated: ${item.estimated.map((k) => SPEC_LABELS[k] ?? k).join(", ")}`);
-  if (item.missing?.length) out.push(`Missing: ${item.missing.map((k) => SPEC_LABELS[k] ?? k).join(", ")}`);
+  if (item.missing?.length) out.push(`Not verified (left blank): ${item.missing.map((k) => SPEC_LABELS[k] ?? k).join(", ")}`);
   if (item.notes?.includes("thin_brief")) out.push("Copy written from the product name only");
   if (item.notes?.includes("no_arabic")) out.push("Arabic copy missing");
   return out;
