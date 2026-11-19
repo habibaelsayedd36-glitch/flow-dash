@@ -134,7 +134,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
     setMessage("");
     try {
       const image_b64 = await imageAsBase64(source.file);
-      setAngleStatus("Analyzing the original product photo with Nemotron Vision…");
+      setAngleStatus("Free mode does not include reference-based image generation.");
       const analysisResponse = await fetch("/api/ai-ad/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -335,8 +335,8 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
         <div>
           <h2 className="h-section">{mode === "cleanup" ? "Output" : "Product and marketplaces"}</h2>
           <p className="mt-1 text-[13px] leading-relaxed text-mute">
-            {mode === "cleanup" ? "Gemini studio retouch: improve product lighting, sharpness and photographic quality while preserving the exact item, then remove the background and export on pure white at 2000 × 2000. " : "Upload one clear Front photo, choose Side, Back or Detail, and generate new AI angle views from the same product reference. "}
-            Background removal runs locally in your browser. AI first analyzes the reference photo with OpenRouter Nemotron Vision, then Google Gemini or OpenAI edits the supplied photo. OpenRouter text-to-image models cannot preserve an uploaded product reference.
+            {mode === "cleanup" ? "Remove the background locally and export the original product photo on pure white. " : "Upload your real product photos, then clean and export them for marketplace image requirements. "}
+            Background removal runs locally in your browser. Background removal and white-background export run locally in your browser. Reference-based image generation is not included in Free mode.
           </p>
         </div>
 
@@ -348,7 +348,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
             </div>
             <div className="rounded-xl border border-line bg-sage-soft p-3.5">
               <h3 className="text-sm font-semibold text-ink">Generate other product angles</h3>
-              <p className="mt-1 text-xs leading-relaxed text-mute">FLOW first analyzes your Front photo with Nemotron Vision, then sends the original photo plus the analysis and fixed studio-style prompt to Google Gemini or OpenAI for editing. OpenRouter text-to-image is not used for reference editing.</p>
+              <p className="mt-1 text-xs leading-relaxed text-mute">Free AI models can analyze images, but they cannot reliably generate new angles while preserving the exact uploaded product. Angle generation is disabled in Free mode; use real side and back photos for accurate listings.</p>
               <div className="mt-3 flex flex-wrap gap-3">
                 {(["side", "back", "detail"] as const).map((angle) => (
                   <label key={angle} className="flex items-center gap-2 text-sm text-ink">
@@ -357,9 +357,9 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
                   </label>
                 ))}
               </div>
-              <button type="button" className="btn btn-primary mt-3 w-full" onClick={generateAngles} disabled={shots.length === 0 || angleTargets.length === 0 || generatingAngles}>
+              <button type="button" className="btn btn-primary mt-3 w-full" onClick={generateAngles} disabled={true}>
                 {generatingAngles ? <Loader2 size={16} className="animate-spin" aria-hidden /> : <ImagePlus size={16} aria-hidden />}
-                {generatingAngles ? "Generating angles…" : "Generate selected angles"}
+                {"Image angles unavailable in Free mode"}
               </button>
               {angleStatus && <p role="status" className="mt-2 text-xs text-mute">{angleStatus}</p>}
               <p className="mt-2 text-[11px] leading-relaxed text-mute">Important: views of hidden packaging surfaces are AI reconstructions. Check any unseen label text before publishing.</p>
