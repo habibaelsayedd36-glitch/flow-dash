@@ -1,7 +1,5 @@
 import { requireApiUser } from "@/lib/auth/server";
-import { db } from "@/db";
-import { settings } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { getAiProvider } from "@/lib/ai";
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -19,17 +17,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Upload a product image smaller than 9 MB." }, { status: 400 });
     }
 
-    const rows = await db.select().from(settings).where(eq(settings.key, "openrouter_vision_key"));
-    const key = rows[0]?.value?.trim();
-    if (!key) {
-      return NextResponse.json({ error: "Add your separate OpenRouter image-analysis key in Settings & AI Key (Nemotron Vision)." }, { status: 400 });
+    const provider = await getAiProvider();
+    if (!provider || provider.id !== "openrouter") {
+      return NextResponse.json({ error: "Connect an OpenRouter Free API key in Settings & AI Key to analyze product photos." }, { status: 400 });
     }
 
     const upstream = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       signal: AbortSignal.timeout(25_000),
       headers: {
-        Authorization: `Bearer ${key}`,
+        Authorization: `Bearer ${provider.key}`,
         "Content-Type": "application/json",
         "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL || "https://flow-dash-drab.vercel.app",
         "X-Title": "FLOW Workspace",
@@ -53,7 +50,7 @@ export async function POST(request: NextRequest) {
     const raw = payload?.choices?.[0]?.message?.content;
     const description = typeof raw === "string" ? raw.trim() : Array.isArray(raw) ? raw.map((part) => part.text ?? "").join("\\n").trim() : "";
     if (!upstream.ok || !description) {
-      return NextResponse.json({ error: payload?.error?.message || `OpenRouter image analysis failed (HTTP ${upstream.status}).` }, { status: upstream.status >= 400 && upstream.status < 600 ? upstream.status : 502 });
+      return NextResponse.json({ error: payload?.error?.message || `OpenRouter free image analysis failed (HTTP ${upstream.status}).` }, { status: upstream.status >= 400 && upstream.status < 600 ? upstream.status : 502 });
     }
     return NextResponse.json({ description }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
