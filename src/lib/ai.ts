@@ -11,13 +11,22 @@ import { RULES, type ListingContent, type ProductBrief } from "./rules";
  * and callers fall back to the template engine — nothing here fabricates output.
  */
 
-export type ProviderId = "anthropic" | "openai" | "gemini" | "groq" | "openrouter";
+export type ProviderId = "openrouter";
 export type AiProvider = { id: ProviderId; label: string; model: string; key: string; source: "env" | "settings" };
 
 export const PROVIDERS: Record<ProviderId, { label: string; defaultModel: string }> = {
   openrouter: { label: "OpenRouter Free", defaultModel: "baidu/ernie-5.5-flash-preview:free" },
 };
 export const isProviderId = (v: unknown): v is ProviderId => typeof v === "string" && v in PROVIDERS;
+
+export async function getOpenRouterVisionKey(): Promise<string> {
+  try {
+    const rows = await db.select().from(settings).where(inArray(settings.key, ["openrouter_vision_key"]));
+    return rows.find((row) => row.key === "openrouter_vision_key")?.value.trim() ?? "";
+  } catch {
+    return "";
+  }
+}
 
 export async function getAiProvider(): Promise<AiProvider | null> {
   const envKey = process.env.OPENROUTER_API_KEY;
