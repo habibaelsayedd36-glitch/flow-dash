@@ -114,14 +114,14 @@ export function AiKeyForm({ providers, current, visionMasked, pixelAiMasked }: {
       </div>
 
       <div className="mt-5 border-t border-line pt-5">
-        <h3 className="text-sm font-semibold text-ink">PixelAI image tools</h3>
+        <h3 className="text-sm font-semibold text-ink">Pixelcut image tools</h3>
         <p className="mt-1 text-[13px] leading-relaxed text-mute">
-          Save your PixelAI API key here for the image workflow. The key is stored on the server and masked in the dashboard.
-          {pixelAiMasked ? <> Saved key: <span className="num text-ink">{pixelAiMasked}</span>.</> : " No PixelAI key saved yet."}
+          Save your Pixelcut API key here for the image workflow. The key is stored on the server and masked in the dashboard.
+          {pixelAiMasked ? <> Saved key: <span className="num text-ink">{pixelAiMasked}</span>.</> : " No Pixelcut key saved yet."}
         </p>
         <form action={savePixelAiKeyAction} className="mt-3 flex flex-col gap-2 sm:flex-row">
-          <input name="pixelAiKey" type="password" className="field min-w-0 flex-1" placeholder={pixelAiMasked ? "Paste a new PixelAI key to replace it" : "Paste PixelAI API key"} autoComplete="off" spellCheck={false} />
-          <button type="submit" className="btn btn-secondary">Save PixelAI key</button>
+          <input name="pixelAiKey" type="password" className="field min-w-0 flex-1" placeholder={pixelAiMasked ? "Paste a new Pixelcut key to replace it" : "Paste Pixelcut API key"} autoComplete="off" spellCheck={false} />
+          <button type="submit" className="btn btn-secondary">Save Pixelcut key</button>
         </form>
       </div>
 
