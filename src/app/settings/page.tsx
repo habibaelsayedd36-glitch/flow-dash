@@ -1,4 +1,7 @@
 import { ShieldAlert } from "lucide-react";
+import { eq } from "drizzle-orm";
+import { db } from "@/db";
+import { settings } from "@/db/schema";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { AiKeyForm } from "@/components/AiKeyForm";
@@ -20,7 +23,8 @@ const SAMPLE = `{
 }`;
 
 export default async function SettingsPage() {
-  const [provider, h] = await Promise.all([getAiProvider(), headers()]);
+  const [provider, h, visionRows] = await Promise.all([getAiProvider(), headers(), db.select().from(settings).where(eq(settings.key, "openrouter_vision_key"))]);
+  const visionKey = visionRows[0]?.value ?? "";
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "your-dashboard-address";
   const endpoint = `${h.get("x-forwarded-proto") ?? "https"}://${host}/api/leads`;
   const code = "mt-1.5 overflow-x-auto rounded-xl bg-flow-bg-soft px-4 py-3 font-mono text-[13px] leading-relaxed text-foreground";
