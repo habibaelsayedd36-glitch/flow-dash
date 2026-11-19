@@ -2,12 +2,12 @@
 
 import { Check, KeyRound, Loader2, PlugZap, Trash2, X } from "lucide-react";
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
-import { removeAiKeyAction, saveAiKeyAction, testAiAction, type KeyState } from "@/app/actions-tools";
+import { removeAiKeyAction, saveAiKeyAction, saveOpenRouterVisionKeyAction, testAiAction, type KeyState } from "@/app/actions-tools";
 
 type ProviderOpt = { id: string; label: string; defaultModel: string };
 type Current = { id: string; label: string; model: string; masked: string; source: "env" | "settings" } | null;
 
-export function AiKeyForm({ providers, current }: { providers: ProviderOpt[]; current: Current }) {
+export function AiKeyForm({ providers, current, visionMasked }: { providers: ProviderOpt[]; current: Current; visionMasked: string }) {
   const [provider, setProvider] = useState(current?.id ?? (providers.find((p) => p.id === "gemini") ?? providers[0]).id);
   const [state, action, saving] = useActionState<KeyState, FormData>(saveAiKeyAction, {});
   const [test, setTest] = useState<{ ok: boolean; message: string } | null>(null);
@@ -101,6 +101,18 @@ export function AiKeyForm({ providers, current }: { providers: ProviderOpt[]; cu
           </div>
         </form>
       )}
+
+      <div className="mt-5 border-t border-line pt-5">
+        <h3 className="text-sm font-semibold text-ink">OpenRouter image analysis (Nemotron Vision)</h3>
+        <p className="mt-1 text-[13px] leading-relaxed text-mute">
+          Optional separate OpenRouter key used only to inspect the uploaded product photo and describe its visible packaging before image editing. It does not generate or edit images.
+          {visionMasked ? <> Saved key: <span className="num text-ink">{visionMasked}</span>.</> : " No analysis key saved yet."}
+        </p>
+        <form action={saveOpenRouterVisionKeyAction} className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <input name="openrouterVisionKey" type="password" className="field min-w-0 flex-1" placeholder={visionMasked ? "Paste a new key to replace it" : "Paste OpenRouter API key"} autoComplete="off" spellCheck={false} />
+          <button type="submit" className="btn btn-secondary">Save analysis key</button>
+        </form>
+      </div>
 
       <div className="mt-5 border-t border-line pt-5">
         <button type="button" className="btn btn-ghost" onClick={runTest} disabled={testing || !current}>
