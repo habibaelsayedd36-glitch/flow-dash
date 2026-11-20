@@ -7,7 +7,7 @@ import { startListingJobAction } from "@/app/actions-tools";
 import { MARKETPLACES, MARKETPLACE_META } from "@/lib/catalog";
 import { FIELDS, type FieldKey, type Mapping } from "@/lib/job-fields";
 
-const IMPORT_FIELDS = FIELDS.filter((field) => field.key === "name" || field.key === "brand");
+const IMPORT_FIELDS = FIELDS.filter((field) => ["sku", "name", "brand", "barcode", "quantity", "price", "color", "size", "material", "weight", "dimensions", "origin", "features", "featuresAr", "keywords"].includes(field.key));
 
 type Parsed = {
   jobId: number;
@@ -102,8 +102,8 @@ export function ListingJobWizard({ clients }: { clients: { id: number; name: str
       <section className="card p-5 sm:p-6" aria-labelledby="map">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 id="map" className="h-section">2. Confirm the two columns</h2>
-            <p className="mt-1 text-sm text-mute">FLOW detected these headers automatically. Check that each one points to the right column.</p>
+            <h2 id="map" className="h-section">2. Map your product fields</h2>
+            <p className="mt-1 text-sm text-mute">Map SKU and any available product details. Name and Brand are required; other fields are optional and help FLOW avoid guessing.</p>
           </div>
           <span className="pill pill-mute !h-8 !px-3">
             <FileSpreadsheet size={14} aria-hidden />
@@ -152,7 +152,7 @@ export function ListingJobWizard({ clients }: { clients: { id: number; name: str
           </div>
         </div>
         <p className="mt-4 rounded-xl bg-sage-soft p-4 text-sm leading-relaxed text-mute">
-          FLOW will research each product using its English name and brand, infer its category, then write the English and Arabic listing. Unverified product facts will not be invented.
+          FLOW will preserve your SKU (or create one if missing), research each product, and write the English and Arabic listing. Size, weight and dimensions may be shown as estimates; colour, material and country of origin stay blank unless you provide verified values.
         </p>
         {error && <p role="alert" className="mt-4 text-sm text-danger">{error}</p>}
         <div className="mt-5 flex flex-wrap items-center gap-3">
