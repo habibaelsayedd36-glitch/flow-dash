@@ -101,12 +101,11 @@ export async function cutout(file: Blob, strength: number): Promise<Cutout> {
   ctx.drawImage(bitmap, 0, 0, w, h);
   bitmap.close();
 
-  // Shadows survive the model as low-alpha haze. Cut everything under the floor
-  // and stretch what is left so solid areas stay fully opaque.
+  // Preserve the model's original alpha matte instead of hard-thresholding it.
+  // Aggressive alpha clipping creates jagged edges and removes fine details,
+  // translucent packaging and the product's natural contact shadow.
   const img = ctx.getImageData(0, 0, w, h);
   const d = img.data;
-  const floor = 24 + (Math.min(100, Math.max(0, strength)) * 0.8);
-  const gain = 255 / Math.max(1, 235 - floor);
   let minX = w;
   let minY = h;
   let maxX = -1;
@@ -115,10 +114,8 @@ export async function cutout(file: Blob, strength: number): Promise<Cutout> {
   for (let y = 0; y < h; y++) {
     const row = y * w * 4;
     for (let x = 0; x < w; x++) {
-      const i = row + x * 4 + 3;
-      const a = d[i] <= floor ? 0 : Math.min(255, (d[i] - floor) * gain);
-      d[i] = a;
-      if (a > 24) {
+      const alpha = d[row + x * 4 + 3];
+      if (alpha > 8) {
         area++;
         if (x < minX) minX = x;
         if (x > maxX) maxX = x;
@@ -127,7 +124,6 @@ export async function cutout(file: Blob, strength: number): Promise<Cutout> {
       }
     }
   }
-  ctx.putImageData(img, 0, 0);
 
   const flags: Flag[] = [];
   const coverage = area / (w * h);
@@ -138,6 +134,12 @@ export async function cutout(file: Blob, strength: number): Promise<Cutout> {
   if (coverage > 0.93) flags.push("not_separated");
   else if (minX <= 1 || minY <= 1 || maxX >= w - 2 || maxY >= h - 2) flags.push("touches_edge");
 
+  // Keep the full soft-alpha edge; only crop fully transparent outer pixels.
+  const pad = Math.max(2, Math.round(Math.min(w, h) * 0.002));
+  minX = Math.max(0, minX - pad);
+  minY = Math.max(0, minY - pad);
+  maxX = Math.min(w - 1, maxX + pad);
+  maxY = Math.min(h - 1, maxY + pad);
   const cw = maxX - minX + 1;
   const ch = maxY - minY + 1;
   const [crop, cctx] = makeCanvas(cw, ch);
