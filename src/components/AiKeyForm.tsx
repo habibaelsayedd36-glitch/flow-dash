@@ -2,12 +2,12 @@
 
 import { Check, KeyRound, Loader2, PlugZap, Trash2, X } from "lucide-react";
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
-import { removeAiKeyAction, saveAiKeyAction, saveOpenRouterVisionKeyAction, savePixelAiKeyAction, testAiAction, type KeyState } from "@/app/actions-tools";
+import { removeAiKeyAction, saveAiKeyAction, saveOpenRouterVisionKeyAction, savePixelAiKeyAction, saveCloudflareFluxKeyAction, testAiAction, type KeyState } from "@/app/actions-tools";
 
 type ProviderOpt = { id: string; label: string; defaultModel: string };
 type Current = { id: string; label: string; model: string; masked: string; source: "env" | "settings" } | null;
 
-export function AiKeyForm({ providers, current, visionMasked, pixelAiMasked }: { providers: ProviderOpt[]; current: Current; visionMasked: string; pixelAiMasked: string }) {
+export function AiKeyForm({ providers, current, visionMasked, pixelAiMasked, cloudflareAccountId = "", cloudflareTokenMasked = "" }: { providers: ProviderOpt[]; current: Current; visionMasked: string; pixelAiMasked: string; cloudflareAccountId?: string; cloudflareTokenMasked?: string }) {
   const [provider, setProvider] = useState(current?.id ?? providers[0].id);
   const [state, action, saving] = useActionState<KeyState, FormData>(saveAiKeyAction, {});
   const [test, setTest] = useState<{ ok: boolean; message: string } | null>(null);
@@ -125,6 +125,20 @@ export function AiKeyForm({ providers, current, visionMasked, pixelAiMasked }: {
         <form action={savePixelAiKeyAction} className="mt-3 flex flex-col gap-2 sm:flex-row">
           <input name="pixelAiKey" type="password" className="field min-w-0 flex-1" placeholder={pixelAiMasked ? "Paste a new Pixelcut key to replace it" : "Paste Pixelcut API key"} autoComplete="off" spellCheck={false} />
           <button type="submit" className="btn btn-secondary">Save Pixelcut key</button>
+        </form>
+      </div>
+
+      <div className="mt-5 border-t border-line pt-5">
+        <h3 className="text-sm font-semibold text-ink">FLUX.2 Klein 4B · AI product photo editing</h3>
+        <p className="mt-1 text-[13px] leading-relaxed text-mute">
+          Connect Cloudflare Workers AI to generate a studio-style product image from the uploaded reference photo. The API token stays on the server. Cloudflare's free allocation is 10,000 Neurons per day; FLOW will not switch to paid usage.
+          {cloudflareTokenMasked ? <> Saved token: <span className="num text-ink">{cloudflareTokenMasked}</span>.</> : " Not connected yet."}
+        </p>
+        <form action={saveCloudflareFluxKeyAction} className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <input name="cloudflareAccountId" className="field min-w-0" defaultValue={cloudflareAccountId} placeholder="Cloudflare Account ID (32 characters)" autoComplete="off" spellCheck={false} />
+          <input name="cloudflareFluxToken" type="password" className="field min-w-0" placeholder={cloudflareTokenMasked ? "Paste a new token to replace it" : "Cloudflare API token"} autoComplete="off" spellCheck={false} />
+          <p className="text-[12px] leading-relaxed text-mute sm:col-span-2">Create a Cloudflare API token with Workers AI: Read and Workers AI: Run permissions. Leave the token field empty to keep the saved token.</p>
+          <div className="sm:col-span-2"><button type="submit" className="btn btn-secondary">Save Cloudflare connection</button></div>
         </form>
       </div>
 
