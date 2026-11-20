@@ -21,7 +21,7 @@ function waitForImage(url: string): Promise<void> {
       image.onerror = () => {
         attempt += 1;
         if (attempt < 7) window.setTimeout(tryLoad, Math.min(1500 * attempt, 7000));
-        else reject(new Error("Cloudinary couldn't finish the AI image. Check that Generative Background Replace is available in your Cloudinary account, then try again."));
+        else reject(new Error("Cloudinary could not finish AI background removal. Check that your plan allows this transformation, then try again."));
       };
       image.src = url + (url.includes("?") ? "&" : "?") + "flow_retry=" + attempt;
     };
@@ -81,24 +81,21 @@ export function AIAdStudio() {
         throw new Error(uploaded.error?.message || "Cloudinary upload failed. Check the cloud name and that the habiba preset is set to Unsigned.");
       }
 
-      setStatus("AI is rebuilding the background and enhancing the product photo…");
+      setStatus("AI is separating the original product from its background…");
       const marker = "/image/upload/";
       const markerIndex = uploaded.secure_url.indexOf(marker);
       if (markerIndex < 0) throw new Error("Cloudinary returned an unexpected image URL.");
 
-      const transformation = [
-        "e_gen_background_replace:prompt_a%20seamless%20pure%20white%20professional%20e-commerce%20studio%20background%20with%20a%20subtle%20natural%20contact%20shadow",
-        "e_auto_enhance",
-        "e_sharpen:80",
-        "f_png",
-      ].join("/");
+      // AI segmentation preserves the uploaded product pixels; only the background is replaced.
+      // Avoid generative background replacement because it can hallucinate product/package details.
+      const transformation = "e_background_removal/b_rgb:ffffff,c_pad,w_1200,h_1200/f_png";
       const resultUrl = uploaded.secure_url.slice(0, markerIndex + marker.length)
         + transformation + "/"
         + uploaded.secure_url.slice(markerIndex + marker.length);
 
       await waitForImage(resultUrl);
       setPreview(resultUrl);
-      setStatus("Your AI-enhanced product image is ready.");
+      setStatus("Your product is isolated on a clean white background. The original product details are preserved as much as the AI cutout allows.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong while generating the image.");
       setStatus("");
@@ -140,17 +137,17 @@ export function AIAdStudio() {
         </label>
         <div className="card overflow-hidden p-3 sm:p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
-            <h3 className="h-section">AI studio result</h3>
+            <h3 className="h-section">White-background product result</h3>
             <span className="rounded-full bg-lime-soft px-3 py-1 text-xs font-medium text-forest">Cloudinary AI</span>
           </div>
           {preview ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={preview} alt="AI-enhanced e-commerce product image" className="mx-auto max-h-[760px] w-auto max-w-full rounded-xl object-contain" />
+            <img src={preview} alt="Product isolated on a white background" className="mx-auto max-h-[760px] w-auto max-w-full rounded-xl object-contain" />
           ) : (
             <div className="grid aspect-[9/16] w-full place-items-center rounded-xl bg-sage-soft text-center text-sm text-mute">
               <div className="max-w-xs px-6">
                 <Sparkles className="mx-auto mb-3 text-moss" size={30} />
-                Your AI-generated studio product photo will appear here.
+                Your product with its original details on a clean white background will appear here.
               </div>
             </div>
           )}
@@ -161,12 +158,12 @@ export function AIAdStudio() {
       <aside className="card flex flex-col gap-5 p-5 sm:p-6">
         <div>
           <h2 className="h-section">AI product photo studio</h2>
-          <p className="mt-1 text-[13px] leading-relaxed text-mute">Cloudinary AI creates a clean white e-commerce studio background, then applies automatic enhancement and sharpening.</p>
+          <p className="mt-1 text-[13px] leading-relaxed text-mute">Cloudinary AI isolates the product from its original photo and places it on pure white. It does not regenerate the product or invent packaging details.</p>
         </div>
         <ul className="space-y-2 text-sm text-mute">
           <li>• Uses the uploaded product photo as its source</li>
-          <li>• AI-generated pure white studio background</li>
-          <li>• Automatic image enhancement and sharpening</li>
+          <li>• AI background removal with a pure white canvas</li>
+          <li>• Original product colors, label and shape are not generatively redrawn</li>
           <li>• No paid image API key or API secret is used</li>
         </ul>
         <button type="button" className="btn btn-primary w-full" onClick={generate} disabled={!file || busy}>
@@ -176,7 +173,7 @@ export function AIAdStudio() {
         {busy && <p className="text-xs leading-relaxed text-mute" aria-live="polite">{status}</p>}
         {error && <p role="alert" className="rounded-xl bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
         <div className="border-t border-line pt-4 text-xs leading-relaxed text-mute">
-          Cloudinary Free plan usage applies. AI may slightly alter fine product details, so review the result before publishing.
+          Cloudinary counts AI background removal toward your account usage. Review fine edges before publishing; no generative background replacement or paid image API is used.
         </div>
       </aside>
     </section>
