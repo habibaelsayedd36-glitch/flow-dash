@@ -447,12 +447,14 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
   const configured = p.model.endsWith(":free") || p.model === "openrouter/free"
     ? p.model
     : PROVIDERS.openrouter.defaultModel;
-  // Prefer a named free model, then let OpenRouter route to an available
-  // free provider instead of relying on a second fixed model that may be down.
+  // Prefer OpenRouter's live free-model router, then use currently listed
+  // text-generation free models as independent fallbacks. Keep this list short:
+  // failed free attempts still count toward OpenRouter's daily request limit.
   const freeModels = Array.from(new Set([
-    configured,
     "openrouter/free",
-    "baidu/ernie-5.5-flash-preview:free",
+    configured,
+    "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "google/gemma-4-31b-it:free",
   ]));
   let data: { choices?: { message?: { content?: unknown } }[] } | undefined;
   let lastError: unknown;
