@@ -51,6 +51,22 @@ function TextField(props: {
   );
 }
 
+
+function mergeFailedSections(
+  current: ListingContent,
+  generated: ListingContent,
+  failed: ReturnType<typeof checkListing>,
+): ListingContent {
+  const fields = new Set(failed.filter((check) => !check.pass).map((check) => check.field));
+  return {
+    ...current,
+    ...(fields.has("title") ? { titleEn: generated.titleEn, titleAr: generated.titleAr } : {}),
+    ...(fields.has("bullets") ? { bulletsEn: generated.bulletsEn, bulletsAr: generated.bulletsAr } : {}),
+    ...(fields.has("description") ? { descriptionEn: generated.descriptionEn, descriptionAr: generated.descriptionAr } : {}),
+    ...(fields.has("terms") ? { searchTerms: generated.searchTerms } : {}),
+  };
+}
+
 function ScoreRing({ score }: { score: number }) {
   const c = 2 * Math.PI * 24;
   const color = score >= 90 ? "#2e6b45" : score >= 70 ? "#c98a1b" : "#c0392b";
@@ -180,36 +196,40 @@ export function ListingEditor(props: {
     setNotice("");
     let nextContent = content;
     let nextResult: Awaited<ReturnType<typeof regenerateListingAction>> | null = null;
-    let remaining = checks.filter((c) => !c.pass);
+    let remaining = checkListing(nextContent, marketplace, { brand: product.brand, keywords: brief.keywords }).filter((c) => !c.pass);
 
-    // Give the model up to three attempts, feeding it the exact checks that still fail.
-    // Without a connected provider, regenerateListingAction uses FLOW's built-in
-    // deterministic template engine. Run it once; AI providers may refine up to 3 times.
+    // Generate a correction candidate, but merge back only the sections whose checks failed.
+    // Passing title/bullets/description/terms remain byte-for-byte unchanged.
     const maxAttempts = aiModel ? 3 : 1;
-    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-      const correctionNotes = remaining.length
-        ? `Automatically fix every failed marketplace compliance check: ${remaining.map((c) => `${t.check[c.id]} ${c.detail ? `(${c.detail})` : ""}`).join("; ")}. Keep all claims strictly grounded in the product facts. Ensure English and Arabic bullets match one-to-one.`
-        : "Create a fully marketplace-compliant bilingual listing using only the supplied product facts.";
+    for (let attempt = 0; attempt < maxAttempts && remaining.length > 0; attempt += 1) {
+      const correctionNotes = `Only correct these failed sections/checks: ${remaining.map((c) => `${c.field}: ${t.check[c.id]} ${c.detail ? `(${c.detail})` : ""}`).join("; ")}. Preserve all other listing sections exactly. Keep claims grounded in product facts and keep English/Arabic bullets aligned.`;
       const notes = [brief.notes, correctionNotes].filter(Boolean).join(" ").slice(0, 500);
-      const res = await regenerateListingAction(listingId, {
-        features: brief.features,
-        featuresAr: brief.featuresAr,
-        keywords: brief.keywords,
-        marketplace: brief.market,
-        tone: brief.tone,
-        notes,
-      });
+      let res: Awaited<ReturnType<typeof regenerateListingAction>>;
+      try {
+        res = await regenerateListingAction(listingId, {
+          features: brief.features,
+          featuresAr: brief.featuresAr,
+          keywords: brief.keywords,
+          marketplace,
+          tone: brief.tone,
+          notes,
+        });
+      } catch (error) {
+        setBusy("");
+        setNotice(error instanceof Error ? error.message : t.common.failed);
+        return;
+      }
       if (!res.ok) {
         setBusy("");
         setNotice(res.error || t.common.failed);
         return;
       }
+
       nextResult = res;
-      nextContent = res.content;
-      const targetMarket = isMarketplace(res.marketplace) ? res.marketplace : marketplace;
-      remaining = checkListing(nextContent, targetMarket, { brand: product.brand, keywords: brief.keywords }).filter((c) => !c.pass);
-      // A provider/research failure already produced the fallback draft and
-      // its actionable error. Repeating the same failed request only burns quota.
+      nextContent = mergeFailedSections(nextContent, res.content, remaining);
+      remaining = checkListing(nextContent, marketplace, { brand: product.brand, keywords: brief.keywords }).filter((c) => !c.pass);
+
+      // A provider/research failure or deterministic fallback will not improve by retrying.
       if (remaining.length === 0 || res.aiError || res.engine !== "ai") break;
     }
 
@@ -218,16 +238,25 @@ export function ListingEditor(props: {
       setNotice(t.common.failed);
       return;
     }
+
+    // The regeneration endpoint stores its full candidate; save the selectively merged
+    // result so untouched, already-valid sections are preserved in the database too.
+    const savedResult = await saveListingAction(listingId, nextContent);
+    if (!savedResult.ok) {
+      setBusy("");
+      setNotice(savedResult.error || t.common.failed);
+      return;
+    }
+
     setContent(nextContent);
     setSaved(nextContent);
-    if (isMarketplace(nextResult.marketplace)) setMarketplace(nextResult.marketplace);
-    setOrigin({ engine: nextResult.engine, model: nextResult.model, edited: false });
+    setOrigin({ engine: nextResult.engine, model: nextResult.model, edited: true });
     setStatus("draft");
     setAiError(nextResult.aiError);
     setBusy("");
     setNotice(remaining.length
-      ? `Auto-fix finished with ${remaining.length} check(s) still needing review. Please verify the highlighted items.`
-      : "All listing compliance checks passed. Listing saved automatically.");
+      ? `Auto-Fix corrected only the affected sections. ${remaining.length} check(s) still need review.`
+      : "Auto-Fix corrected only the failed sections. All compliance checks now pass.");
   };
 
   const copyAll = async () => {
