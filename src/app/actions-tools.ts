@@ -20,6 +20,18 @@ const clamp = (v: unknown, min: number, max: number, fallback: number) => {
   return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
 };
 
+/** Stable, readable codes for merchant + brand SKU namespaces. */
+function skuCode(value: string, fallback: string): string {
+  const words = value.normalize("NFKD").replace(/[\\u0300-\\u036f]/g, "").toUpperCase().match(/[A-Z0-9]+/g) ?? [];
+  const initials = words.map((word) => word[0]).join("");
+  const compact = words.join("");
+  return (initials.length >= 2 ? initials : compact).slice(0, 5) || fallback;
+}
+
+function skuIdentity(value: string): string {
+  return value.normalize("NFKD").replace(/[\\u0300-\\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
 // ----------------------------------------------------------------- AI key
 
 async function setSetting(key: string, value: string) {
@@ -104,9 +116,29 @@ export async function startListingJobAction(
   const [job] = await db.select().from(jobs).where(eq(jobs.id, jobId));
   if (!job || job.status !== "draft") return { ok: false, error: "This job has already started." };
   const client = input.clientId ? (await db.select().from(clients).where(eq(clients.id, input.clientId)))[0] : undefined;
+  if (!client) return { ok: false, error: "Choose a valid merchant before generating SKUs." };
 
+  // Reuse existing SKUs for this merchant and continue each brand's sequence.
+  const existingProducts = await db
+    .select({ name: products.name, brand: products.brand, sku: products.sku })
+    .from(products)
+    .where(eq(products.clientId, client.id));
+  const merchantCode = skuCode(client.name, "MER") + String(client.id).padStart(3, "0");
   const items: JobItem[] = [];
   const missingBrandRows: number[] = [];
+  const skuByProduct = new Map<string, string>();
+  const nextSequence = new Map<string, number>();
+
+  for (const product of existingProducts) {
+    const brandCode = skuCode(product.brand || "", "BRAND");
+    const prefix = `${merchantCode}-${brandCode}-`;
+    const match = product.sku.match(new RegExp("^" + prefix + "(\\d+)$", "i"));
+    if (match) nextSequence.set(prefix, Math.max(nextSequence.get(prefix) ?? 1, Number(match[1]) + 1));
+    if (product.sku && product.name && product.brand) {
+      skuByProduct.set(`${skuIdentity(product.brand)}::${skuIdentity(product.name)}`, product.sku);
+    }
+  }
+
   for (const [rowIndex, row] of job.raw.slice(1).entries()) {
     const source: Record<string, string> = {};
     const mappedFields = ["sku", "name", "brand", "barcode", "quantity", "price", "color", "size", "material", "weight", "dimensions", "origin", "features", "featuresAr", "keywords"] as const;
@@ -115,13 +147,26 @@ export async function startListingJobAction(
       const value = typeof col === "number" && col >= 0 ? String(row[col] ?? "").trim().slice(0, 1500) : "";
       if (value) source[key] = value;
     }
-    // Preserve a supplied seller SKU; otherwise assign a stable FLOW SKU.
-    if (!source.sku) source.sku = `FLOW-${jobId}-${String(rowIndex + 1).padStart(4, "0")}`;
-    if (!source.name && !source.brand) continue;
     if (!source.name) continue;
     if (!source.brand) {
       missingBrandRows.push(rowIndex + 2);
       continue;
+    }
+
+    // Keep seller SKUs; otherwise reuse a prior product SKU or allocate one.
+    if (!source.sku) {
+      const productKey = `${skuIdentity(source.brand)}::${skuIdentity(source.name)}`;
+      const priorSku = skuByProduct.get(productKey);
+      if (priorSku) {
+        source.sku = priorSku;
+      } else {
+        const brandCode = skuCode(source.brand, "BRAND");
+        const prefix = `${merchantCode}-${brandCode}-`;
+        const sequence = nextSequence.get(prefix) ?? 1;
+        source.sku = `${prefix}${String(sequence).padStart(4, "0")}`;
+        nextSequence.set(prefix, sequence + 1);
+        skuByProduct.set(productKey, source.sku);
+      }
     }
     items.push({ source, status: "pending" });
   }
