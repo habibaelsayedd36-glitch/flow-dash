@@ -3,7 +3,7 @@
 import { Check, Download, FileSpreadsheet, Loader2, PackagePlus, TriangleAlert } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { finishJobAction, importJobAction, processJobItemAction, pauseJobAction, retryFailedJobItemsAction, verifyJobItemAction } from "@/app/actions-tools";
+import { autoFixAllJobItemsAction, finishJobAction, importJobAction, processJobItemAction, pauseJobAction, retryFailedJobItemsAction, verifyJobItemAction } from "@/app/actions-tools";
 import { ScoreBadge } from "./ui";
 
 type Item = {
@@ -26,7 +26,7 @@ export function JobRunner({ jobId, items, hasClient, clientName, imported, statu
   const [processed, setProcessed] = useState(0);
   const pendingKey = pending.map((item) => item.index).join(",");
   const [includeEstimates, setIncludeEstimates] = useState(false);
-  const [busy, setBusy] = useState<"" | "import" | number>("");
+  const [busy, setBusy] = useState<"" | "import" | "autofix" | number>("");
   const [notice, setNotice] = useState("");
   const [workerError, setWorkerError] = useState("");
   const started = useRef(false);
@@ -94,6 +94,15 @@ export function JobRunner({ jobId, items, hasClient, clientName, imported, statu
     setBusy("");
     router.refresh();
   };
+  const autoFixAll = async () => {
+    setBusy("autofix");
+    setNotice("");
+    const res = await autoFixAllJobItemsAction(jobId);
+    setBusy("");
+    if (!res.ok) { setNotice(res.error ?? "Could not start Auto-Fix."); return; }
+    setNotice("Auto-Fix started for all " + res.count + " completed listings. Progress is saved after each product.");
+    router.refresh();
+  };
   const addToPipeline = async () => {
     setBusy("import");
     const res = await importJobAction(jobId);
@@ -144,6 +153,7 @@ export function JobRunner({ jobId, items, hasClient, clientName, imported, statu
         <h2 id="downloads" className="h-section">Downloads</h2>
         {failed.length > 0 && <p className="mt-2 text-sm text-danger">{failed.length} rows were not generated. Progress is saved. Resume after the provider quota resets or service recovers.</p>}
         <div className="mt-4 flex flex-wrap gap-2">
+          {done.length > 0 && !imported && !running && <button type="button" className="btn btn-primary" onClick={autoFixAll} disabled={busy !== ""}>{busy === "autofix" ? <Loader2 size={16} className="animate-spin" aria-hidden /> : <Check size={16} aria-hidden />}Auto-Fix All ({done.length})</button>}
           <a href={`/api/jobs/${jobId}/download?file=collecting`} className="btn btn-primary">
             <FileSpreadsheet size={16} aria-hidden />
             Collecting sheet (.xlsx)
