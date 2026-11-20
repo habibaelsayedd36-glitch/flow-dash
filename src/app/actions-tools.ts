@@ -43,7 +43,7 @@ export async function saveAiKeyAction(_prev: KeyState, fd: FormData): Promise<Ke
   await setSetting("ai_provider", provider);
   if (key) await setSetting("ai_key", key);
   const freeModel = provider === "gemini"
-    ? "gemini-2.5-flash-lite"
+    ? "gemini-3.5-flash-lite"
     : model.endsWith(":free") || model === "openrouter/free" ? model : "baidu/ernie-5.5-flash-preview:free";
   await setSetting("ai_model", freeModel);
   refresh();
