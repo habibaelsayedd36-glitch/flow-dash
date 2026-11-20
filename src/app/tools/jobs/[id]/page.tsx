@@ -8,6 +8,7 @@ import { getJob } from "@/lib/data";
 import { flagSummary } from "@/lib/job-fields";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 export const metadata: Metadata = { title: "Listing job" };
 
 export default async function JobPage({ params }: { params: Promise<{ id: string }> }) {
