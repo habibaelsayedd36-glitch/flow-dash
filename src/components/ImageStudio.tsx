@@ -153,11 +153,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
         canvas.toBlob((value) => value ? resolve(value) : reject(new Error("Could not encode the FLUX reference image.")), "image/png"),
       );
       setMessage("Connecting to the free Hugging Face Space…");
-      const app = await Client.connect("Xurxowsky/flux2-klein-4b-playground", {
-        space_status: (status) => {
-          if (status.status === "building" || status.status === "sleeping") setMessage("Waking up the free Hugging Face Space. Please keep this tab open…");
-        },
-      });
+      const app = await Client.connect("Xurxowsky/flux2-klein-4b-playground");
       setMessage("Waiting for the free ZeroGPU queue and regenerating your product photo. This may take a minute or longer; keep this tab open…");
       const result = await app.predict("/generate_images", [
         "",
