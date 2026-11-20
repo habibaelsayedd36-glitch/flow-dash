@@ -336,7 +336,7 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
             },
             body: JSON.stringify({
               model,
-              input: `${system}\\n\\nUSER REQUEST:\\n${user}`,
+              input: `${system}\n\nUSER REQUEST:\n${user}`,
               store: false,
               ...(json ? { response_format: { type: "text", mime_type: "application/json" } } : {}),
             }),
