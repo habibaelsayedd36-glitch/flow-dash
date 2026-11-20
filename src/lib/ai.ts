@@ -288,14 +288,14 @@ function retryDelayMs(res: Response, data: unknown, attempt: number): number {
 async function post(url: string, headers: Record<string, string>, body: unknown, who: string): Promise<unknown> {
   const retryable = new Set([429, 500, 502, 503, 504]);
   let lastError: unknown;
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 1; attempt++) {
     let res: Response;
     try {
       res = await fetch(url, {
         method: "POST",
         headers: { "content-type": "application/json", ...headers },
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(60_000),
+        signal: AbortSignal.timeout(15_000),
         cache: "no-store",
       });
     } catch (error) {
@@ -330,11 +330,11 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
   if (p.id === "gemini") {
     // Retry temporary overloads, then try a second free Gemini model.
     // Never switch to a paid model or silently change providers.
-    const models = Array.from(new Set([p.model || PROVIDERS.gemini.defaultModel, "gemini-3.8-flash"]));
+    const models = [p.model || PROVIDERS.gemini.defaultModel];
     let lastError: Error | null = null;
 
     for (const model of models) {
-      for (let attempt = 0; attempt < 3; attempt++) {
+      for (let attempt = 0; attempt < 1; attempt++) {
         let response: Response;
         try {
           response = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
@@ -349,7 +349,7 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
               store: false,
               ...(json ? { response_format: { type: "text", mime_type: "application/json" } } : {}),
             }),
-            signal: AbortSignal.timeout(60_000),
+            signal: AbortSignal.timeout(15_000),
             cache: "no-store",
           });
         } catch (error) {
@@ -403,7 +403,7 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
     // If Gemini's daily free quota is exhausted, use an explicitly configured
     // OpenRouter free key. Never fall back to a paid model.
     const geminiDailyLimit = /requests per day|per day.*limit|daily.*quota|quota.*exceeded|generate_content_free_tier_requests|limit:\\s*\\d+ requests per day/i.test(lastError?.message || "");
-    if (geminiDailyLimit) {
+    if (geminiDailyLimit || /timeout|timed out|fetch failed|temporarily unavailable|502|503|504|429|rate.?limit/i.test(lastError?.message || "")) {
       let fallbackKey = process.env.OPENROUTER_API_KEY?.trim() || await getOpenRouterFallbackKey();
       const fallbackModel = process.env.AI_MODEL?.trim() || PROVIDERS.openrouter.defaultModel;
       if (fallbackKey) {
@@ -449,12 +449,7 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
     : PROVIDERS.openrouter.defaultModel;
   const freeModels = Array.from(new Set([
     configured,
-    "nvidia/nemotron-3.5-lightning:free",
     "baidu/ernie-5.5-flash-preview:free",
-    "nvidia/nemotron-3-ultra-550b-a55b:free",
-    "thinkingmachines/inkling-2-small:free",
-    "inclusionai/ling-3.2-flash:free",
-    "openrouter/free",
   ]));
   let data: { choices?: { message?: { content?: string } }[] } | undefined;
   let lastError: unknown;
