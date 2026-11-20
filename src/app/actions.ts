@@ -171,15 +171,23 @@ export async function bulkGenerateListingsAction(productIds: number[], marketpla
   const ids = [...new Set(productIds.map((id) => int(id, 1, 2_000_000_000, 0)).filter(Boolean))].slice(0, 25);
   if (!ids.length) return { ok: false, results: [] };
   const rows = await db.select().from(products).where((await import("drizzle-orm")).inArray(products.id, ids));
+  // Run a small number of independent model requests concurrently instead of
+  // waiting for every product to finish before starting the next one.
+  // A limit of 3 improves throughput without flooding the connected provider.
   const results: BulkGenerateResult["results"] = [];
-  for (const product of rows) {
-    try {
-      const made = await produceListing(product, { marketplace, tone: "clear" });
-      await emit("listing_generated", { productId: product.id, clientId: product.clientId, listingId: made.listingId, score: made.score });
-      results.push({ productId: product.id, productName: product.name, listingId: made.listingId, engine: made.engine, aiError: made.aiError ?? undefined });
-    } catch {
-      results.push({ productId: product.id, productName: product.name, error: "Generation failed" });
-    }
+  const concurrency = 3;
+  for (let offset = 0; offset < rows.length; offset += concurrency) {
+    const batch = rows.slice(offset, offset + concurrency);
+    const batchResults = await Promise.all(batch.map(async (product): Promise<BulkGenerateResult["results"][number]> => {
+      try {
+        const made = await produceListing(product, { marketplace, tone: "clear" });
+        await emit("listing_generated", { productId: product.id, clientId: product.clientId, listingId: made.listingId, score: made.score });
+        return { productId: product.id, productName: product.name, listingId: made.listingId, engine: made.engine, aiError: made.aiError ?? undefined };
+      } catch (error) {
+        return { productId: product.id, productName: product.name, error: error instanceof Error ? error.message.slice(0, 180) : "Generation failed" };
+      }
+    }));
+    results.push(...batchResults);
   }
   refresh();
   return { ok: results.length > 0 && results.every((r) => !r.error), results };
