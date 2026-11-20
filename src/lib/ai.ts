@@ -362,6 +362,8 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
           const message = `Google Gemini (${response.status}): ${data?.error?.message || response.statusText || "request failed"}`;
           lastError = new Error(message);
           const retryable = [429, 500, 502, 503, 504].includes(response.status);
+          const dailyQuotaLimit = /requests per day|per day.*limit|daily.*quota|quota.*exceeded|generate_content_free_tier_requests|limit:\\s*\\d+ requests per day/i.test(data?.error?.message || "");
+          if (dailyQuotaLimit) break;
           if (retryable && attempt < 2) {
             const retryAfter = Number(response.headers.get("retry-after") || "");
             const delay = Number.isFinite(retryAfter) && retryAfter > 0
@@ -384,6 +386,43 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
         if (!result) throw new Error(`Google Gemini (${model}) returned an empty response.`);
         return result;
       }
+      // A daily free-tier cap applies to the project, not just this model.
+      // Do not waste requests trying another Gemini model after that response.
+      if (/requests per day|per day.*limit|daily.*quota|quota.*exceeded|generate_content_free_tier_requests|limit:\\s*\\d+ requests per day/i.test(lastError?.message || "")) break;
+    }
+
+    // If Gemini's daily free quota is exhausted, use an explicitly configured
+    // OpenRouter free key. Never fall back to a paid model.
+    const geminiDailyLimit = /requests per day|per day.*limit|daily.*quota|quota.*exceeded|generate_content_free_tier_requests|limit:\\s*\\d+ requests per day/i.test(lastError?.message || "");
+    if (geminiDailyLimit) {
+      let fallbackKey = process.env.OPENROUTER_API_KEY?.trim() || "";
+      let fallbackModel = process.env.AI_MODEL?.trim() || PROVIDERS.openrouter.defaultModel;
+      if (!fallbackKey) {
+        try {
+          const rows = await db.select().from(settings).where(inArray(settings.key, ["ai_provider", "ai_key", "ai_model"]));
+          const get = (key: string) => rows.find((row) => row.key === key)?.value.trim() ?? "";
+          if (get("ai_provider") === "openrouter") {
+            fallbackKey = get("ai_key");
+            fallbackModel = get("ai_model") || PROVIDERS.openrouter.defaultModel;
+          }
+        } catch {
+          // No saved OpenRouter configuration; report the Gemini quota clearly.
+        }
+      }
+      if (fallbackKey) {
+        return callModel({
+          id: "openrouter",
+          label: PROVIDERS.openrouter.label,
+          model: fallbackModel.endsWith(":free") || fallbackModel === "openrouter/free"
+            ? fallbackModel
+            : PROVIDERS.openrouter.defaultModel,
+          key: fallbackKey,
+          source: process.env.OPENROUTER_API_KEY ? "env" : "settings",
+        }, system, user, json);
+      }
+      throw new Error(
+        `Google Gemini free daily quota is exhausted. FLOW did not use a paid model. Add an OpenRouter free API key in Settings to enable automatic free-model fallback, or wait for Gemini quota reset. ${lastError?.message || ""}`,
+      );
     }
 
     throw new Error(
