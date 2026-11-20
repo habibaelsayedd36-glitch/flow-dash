@@ -447,8 +447,11 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
   const configured = p.model.endsWith(":free") || p.model === "openrouter/free"
     ? p.model
     : PROVIDERS.openrouter.defaultModel;
+  // Prefer a named free model, then let OpenRouter route to an available
+  // free provider instead of relying on a second fixed model that may be down.
   const freeModels = Array.from(new Set([
     configured,
+    "openrouter/free",
     "baidu/ernie-5.5-flash-preview:free",
   ]));
   let data: { choices?: { message?: { content?: string } }[] } | undefined;
@@ -456,7 +459,14 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
   for (const model of freeModels) {
     try {
       data = (await requestChat(model)) as typeof data;
-      const result = data?.choices?.[0]?.message?.content?.trim();
+      const message = data?.choices?.[0]?.message;
+      const content = message?.content;
+      const result = typeof content === "string"
+        ? content.trim()
+        : Array.isArray(content)
+          ? content.filter((part: unknown) => typeof part === "object" && part !== null && "text" in part)
+              .map((part: any) => String(part.text ?? "")).join("").trim()
+          : "";
       if (result) return result;
       lastError = new Error(`OpenRouter Free: ${model} returned an empty response.`);
     } catch (error) {
