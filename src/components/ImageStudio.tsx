@@ -190,7 +190,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
       const runSpaceEndpoint = async (endpoint: string, data: unknown[]) => {
         const response = await fetch(`${space}/gradio_api/call/${endpoint}`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", "x-gradio-user": "api" },
           body: JSON.stringify({ data, session_hash: sessionHash }),
           cache: "no-store",
         });
@@ -200,7 +200,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
         }
         const result = await fetch(
           `${space}/gradio_api/call/${endpoint}/${encodeURIComponent(payload.event_id)}`,
-          { cache: "no-store" },
+          { headers: { "x-gradio-user": "api" }, cache: "no-store" },
         );
         if (!result.ok) {
           throw new Error(`Hugging Face could not read the ${endpoint} result (HTTP ${result.status}).`);
