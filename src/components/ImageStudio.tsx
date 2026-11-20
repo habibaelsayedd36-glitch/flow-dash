@@ -56,7 +56,7 @@ function anglePrompt(angle: Exclude<Angle, "front">): string {
 
 export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
   const [shots, setShots] = useState<Shot[]>([]);
-  const [tolerance, setTolerance] = useState(40);
+  const [tolerance, setTolerance] = useState(70);
   const [fill, setFill] = useState(85);
   const [size, setSize] = useState(2000);
   const [sku, setSku] = useState("");
