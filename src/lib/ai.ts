@@ -20,6 +20,15 @@ export const PROVIDERS: Record<ProviderId, { label: string; defaultModel: string
 };
 export const isProviderId = (v: unknown): v is ProviderId => typeof v === "string" && v in PROVIDERS;
 
+export async function getOpenRouterFallbackKey(): Promise<string> {
+  try {
+    const rows = await db.select().from(settings).where(inArray(settings.key, ["openrouter_fallback_key"]));
+    return rows.find((row) => row.key === "openrouter_fallback_key")?.value.trim() ?? "";
+  } catch {
+    return "";
+  }
+}
+
 export async function getOpenRouterVisionKey(): Promise<string> {
   try {
     const rows = await db.select().from(settings).where(inArray(settings.key, ["openrouter_vision_key"]));
@@ -395,20 +404,8 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
     // OpenRouter free key. Never fall back to a paid model.
     const geminiDailyLimit = /requests per day|per day.*limit|daily.*quota|quota.*exceeded|generate_content_free_tier_requests|limit:\\s*\\d+ requests per day/i.test(lastError?.message || "");
     if (geminiDailyLimit) {
-      let fallbackKey = process.env.OPENROUTER_API_KEY?.trim() || "";
-      let fallbackModel = process.env.AI_MODEL?.trim() || PROVIDERS.openrouter.defaultModel;
-      if (!fallbackKey) {
-        try {
-          const rows = await db.select().from(settings).where(inArray(settings.key, ["ai_provider", "ai_key", "ai_model"]));
-          const get = (key: string) => rows.find((row) => row.key === key)?.value.trim() ?? "";
-          if (get("ai_provider") === "openrouter") {
-            fallbackKey = get("ai_key");
-            fallbackModel = get("ai_model") || PROVIDERS.openrouter.defaultModel;
-          }
-        } catch {
-          // No saved OpenRouter configuration; report the Gemini quota clearly.
-        }
-      }
+      let fallbackKey = process.env.OPENROUTER_API_KEY?.trim() || await getOpenRouterFallbackKey();
+      const fallbackModel = process.env.AI_MODEL?.trim() || PROVIDERS.openrouter.defaultModel;
       if (fallbackKey) {
         return callModel({
           id: "openrouter",
