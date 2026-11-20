@@ -275,8 +275,9 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
     try {
       const files: Record<string, Uint8Array> = {};
       const bytes = async (s: Shot, px: number, ratio: number) => {
-        if (!s.pixelcutBlob) return new Uint8Array(await (await toJpeg(compose(s.cut as Cutout, px, ratio))).arrayBuffer());
-        const bitmap = await createImageBitmap(s.pixelcutBlob);
+        const generatedBlob = s.aiBlob ?? s.pixelcutBlob;
+        if (!generatedBlob) return new Uint8Array(await (await toJpeg(compose(s.cut as Cutout, px, ratio))).arrayBuffer());
+        const bitmap = await createImageBitmap(generatedBlob);
         const canvas = document.createElement("canvas");
         canvas.width = px;
         canvas.height = px;
@@ -389,7 +390,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
                         </span>
                       )}
                     </div>
-                    <figcaption className="eyebrow px-3 py-2">Cleaned</figcaption>
+                    <figcaption className="eyebrow px-3 py-2">{s.aiBlob ? "AI-generated" : s.pixelcutBlob ? "Background removed" : "Cleaned"}</figcaption>
                   </figure>
                 </div>
                 <div className="flex flex-col gap-2.5 p-3.5">
