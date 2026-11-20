@@ -11,10 +11,11 @@ import { RULES, type ListingContent, type ProductBrief } from "./rules";
  * and callers fall back to the template engine — nothing here fabricates output.
  */
 
-export type ProviderId = "openrouter";
+export type ProviderId = "gemini" | "openrouter";
 export type AiProvider = { id: ProviderId; label: string; model: string; key: string; source: "env" | "settings" };
 
 export const PROVIDERS: Record<ProviderId, { label: string; defaultModel: string }> = {
+  gemini: { label: "Google Gemini Free", defaultModel: "gemini-2.5-flash-lite" },
   openrouter: { label: "OpenRouter Free", defaultModel: "baidu/ernie-5.5-flash-preview:free" },
 };
 export const isProviderId = (v: unknown): v is ProviderId => typeof v === "string" && v in PROVIDERS;
@@ -38,6 +39,8 @@ export async function getPixelAiKey(): Promise<string> {
 }
 
 export async function getAiProvider(): Promise<AiProvider | null> {
+  const geminiEnvKey = process.env.GEMINI_API_KEY;
+  if (geminiEnvKey) return { id: "gemini", label: PROVIDERS.gemini.label, model: PROVIDERS.gemini.defaultModel, key: geminiEnvKey, source: "env" };
   const envKey = process.env.OPENROUTER_API_KEY;
   const envModel = process.env.AI_MODEL?.trim() ?? "";
   const isFreeModel = (model: string) => model.endsWith(":free") || model === "openrouter/free";
@@ -47,6 +50,7 @@ export async function getAiProvider(): Promise<AiProvider | null> {
     const get = (k: string) => rows.find((r) => r.key === k)?.value.trim() ?? "";
     const id = get("ai_provider");
     const key = get("ai_key");
+    if (id === "gemini" && key) return { id: "gemini", label: PROVIDERS.gemini.label, model: PROVIDERS.gemini.defaultModel, key, source: "settings" };
     if (id === "openrouter" && key) {
       const savedModel = get("ai_model");
       const model = savedModel && (savedModel.endsWith(":free") || savedModel === "openrouter/free")
@@ -302,7 +306,24 @@ async function post(url: string, headers: Record<string, string>, body: unknown,
 
 /** One request to whichever provider is connected. Returns the raw text of the reply. */
 async function callModel(p: AiProvider, system: string, user: string, json: boolean): Promise<string> {
-  if (p.id !== "openrouter") throw new Error("FLOW Free mode only supports OpenRouter free models.");
+  if (p.id === "gemini") {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${PROVIDERS.gemini.defaultModel}:generateContent?key=${encodeURIComponent(p.key)}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: system }] },
+        contents: [{ role: "user", parts: [{ text: user }] }],
+        generationConfig: { maxOutputTokens: 4000, ...(json ? { responseMimeType: "application/json" } : {}) },
+      }),
+      signal: AbortSignal.timeout(60_000),
+      cache: "no-store",
+    });
+    const data = await response.json().catch(() => null) as { candidates?: { content?: { parts?: { text?: string }[] } }[]; error?: { message?: string } } | null;
+    if (!response.ok) throw new Error(`Google Gemini (${response.status}): ${data?.error?.message || response.statusText || "request failed"}`);
+    const result = data?.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("").trim();
+    if (!result) throw new Error("Google Gemini returned an empty response.");
+    return result;
+  }
   const requestChat = (model: string) => post(
     "https://openrouter.ai/api/v1/chat/completions",
     {
