@@ -80,7 +80,7 @@ export async function saveOpenRouterVisionKeyAction(fd: FormData): Promise<void>
   refresh();
 }
 
-export async function saveCloudflareFluxKeyAction(fd: FormData): Promise<{ ok: boolean; error?: string }> {
+export async function saveCloudflareFluxKeyAction(_prev: KeyState, fd: FormData): Promise<KeyState> {
   await requireUser();
   await ensureDb();
   const accountId = String(fd.get("cloudflareAccountId") ?? "").trim();
