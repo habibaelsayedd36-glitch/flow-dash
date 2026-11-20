@@ -176,8 +176,26 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
 
       const generated = await fetch(imageUrl, { cache: "no-store" });
       if (!generated.ok) throw new Error("The generated image could not be downloaded from Hugging Face.");
-      const blob = await generated.blob();
-      if (!blob.size || !blob.type.startsWith("image/")) throw new Error("FLUX returned an invalid image.");
+      const generatedBlob = await generated.blob();
+      if (!generatedBlob.size || !generatedBlob.type.startsWith("image/")) throw new Error("FLUX returned an invalid image.");
+      // Flatten any transparent pixels onto pure white so preview and exported file
+      // always have the required marketplace #FFFFFF background.
+      const generatedBitmap = await createImageBitmap(generatedBlob);
+      const whiteCanvas = document.createElement("canvas");
+      whiteCanvas.width = generatedBitmap.width;
+      whiteCanvas.height = generatedBitmap.height;
+      const whiteContext = whiteCanvas.getContext("2d");
+      if (!whiteContext) {
+        generatedBitmap.close();
+        throw new Error("Could not prepare the white-background output image.");
+      }
+      whiteContext.fillStyle = "#FFFFFF";
+      whiteContext.fillRect(0, 0, whiteCanvas.width, whiteCanvas.height);
+      whiteContext.drawImage(generatedBitmap, 0, 0);
+      generatedBitmap.close();
+      const blob = await new Promise<Blob>((resolve, reject) =>
+        whiteCanvas.toBlob((value) => value ? resolve(value) : reject(new Error("Could not flatten the generated image onto white.")), "image/png"),
+      );
       const preview = URL.createObjectURL(blob);
       if (shot.preview) URL.revokeObjectURL(shot.preview);
       patch(shot.id, { preview, aiBlob: blob });
