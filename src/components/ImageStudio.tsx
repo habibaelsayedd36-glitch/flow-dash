@@ -232,11 +232,11 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
         return JSON.parse(dataLine.slice(5).trim()) as unknown;
       };
 
-      // This mirrors selecting the Image to Image tab in the Space UI.
-      await runSpaceEndpoint("on_select_i2i", []);
-      // Gradio's public API omits the gr.State argument; pass only the seven
-      // actual input components in the order declared by app.py.
+      // The Space's generate_images function explicitly accepts active_mode
+      // as its first argument. Tab-select callbacks are UI events, not public
+      // API endpoints, so set the mode directly in this call.
       const resultPayload = await runSpaceEndpoint("generate_images", [
+        "i2i",
         "",
         productPrompt,
         {
