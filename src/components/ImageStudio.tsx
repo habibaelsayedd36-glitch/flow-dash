@@ -119,12 +119,12 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
     setMessage("");
     const space = "https://xurxowsky-flux2-klein-4b-playground.hf.space";
     const productPrompt = [
-      "Create a completely new, photorealistic premium ecommerce studio photograph by re-rendering the uploaded product reference. This must be a genuine image-to-image regeneration, not simple background removal or a filter.",
+      "Carefully retouch the uploaded product reference into a premium ecommerce studio photograph. This is a conservative image-to-image edit: preserve the photographed product and its identity; do not replace it with a newly imagined object.",
       "The uploaded photograph is the single source of truth. Preserve the exact same real product identity and design: silhouette, geometry, proportions, dimensions, packaging shape, cap, pump, closure, material, surface finish, colors, logo, brand mark, label placement, label layout, typography, icons and every visible printed word.",
       "Do not redesign, recolor, simplify, beautify by changing the product, add or remove parts, invent accessories, duplicate the product, translate text, or make up label wording. Keep the printed label faithful to the reference; never replace uncertain small text with invented writing.",
       "Create a perfectly seamless pure white #FFFFFF background edge-to-edge. Show one product only, upright, front-facing, centered, fully visible with safe margins, occupying about 85 percent of a square frame.",
-      "Rebuild the photograph with polished premium commercial studio lighting, accurate white balance and product colors, crisp realistic edges, clean fine detail, natural material reflections, controlled highlights, and a subtle realistic contact shadow directly beneath the product.",
-      "The result should look like a newly photographed high-end marketplace main image. No props, scenery, gradients, colored backgrounds, extra text, watermark, border, or frame."
+      "Improve only the photography: polished commercial studio lighting, accurate white balance and product colors, crisp realistic edges, clean fine detail, natural material reflections, controlled highlights, and a subtle realistic contact shadow directly beneath the product. Keep the product itself as close as possible to the reference pixels.",
+      "The result should look like the same exact product professionally photographed for a high-end marketplace main image. No props, scenery, gradients, colored backgrounds, extra text, watermark, border, or frame."
     ].join(" ");
     const findImageUrl = (value: unknown): string | null => {
       if (!value || typeof value !== "object") return null;
@@ -159,7 +159,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
         "",
         productPrompt,
         handle_file(reference),
-        0.95,
+        0.35,
         "Photoreal / Fotorrealista",
         "Square 1:1 / Cuadrado 1:1",
         4,
