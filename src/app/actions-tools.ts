@@ -109,11 +109,14 @@ export async function startListingJobAction(
   const missingBrandRows: number[] = [];
   for (const [rowIndex, row] of job.raw.slice(1).entries()) {
     const source: Record<string, string> = {};
-    for (const key of ["name", "brand"] as const) {
+    const mappedFields = ["sku", "name", "brand", "barcode", "quantity", "price", "color", "size", "material", "weight", "dimensions", "origin", "features", "featuresAr", "keywords"] as const;
+    for (const key of mappedFields) {
       const col = input.mapping?.[key];
       const value = typeof col === "number" && col >= 0 ? String(row[col] ?? "").trim().slice(0, 1500) : "";
       if (value) source[key] = value;
     }
+    // Preserve a supplied seller SKU; otherwise assign a stable FLOW SKU.
+    if (!source.sku) source.sku = `FLOW-${jobId}-${String(rowIndex + 1).padStart(4, "0")}`;
     if (!source.name && !source.brand) continue;
     if (!source.name) continue;
     if (!source.brand) {
