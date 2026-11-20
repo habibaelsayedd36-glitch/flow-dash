@@ -16,7 +16,7 @@ export type AiProvider = { id: ProviderId; label: string; model: string; key: st
 
 export const PROVIDERS: Record<ProviderId, { label: string; defaultModel: string }> = {
   gemini: { label: "Google Gemini Free", defaultModel: "gemini-3.5-flash-lite" },
-  openrouter: { label: "OpenRouter Free", defaultModel: "baidu/ernie-5.5-flash-preview:free" },
+  openrouter: { label: "OpenRouter Free", defaultModel: "nvidia/nemotron-3.5-lightning:free" },
 };
 export const isProviderId = (v: unknown): v is ProviderId => typeof v === "string" && v in PROVIDERS;
 
@@ -449,6 +449,7 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
     : PROVIDERS.openrouter.defaultModel;
   const freeModels = Array.from(new Set([
     configured,
+    "nvidia/nemotron-3.5-lightning:free",
     "baidu/ernie-5.5-flash-preview:free",
     "nvidia/nemotron-3-ultra-550b-a55b:free",
     "thinkingmachines/inkling-2-small:free",
