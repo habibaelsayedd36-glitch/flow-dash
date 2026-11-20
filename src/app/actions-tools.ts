@@ -12,7 +12,7 @@ import { SPEC_KEYS, generateJobItem, getAiProvider, isProviderId, testProvider, 
 import { PLANS, TONES, isMarketplace, type PlanId } from "@/lib/catalog";
 import { checkQuota, emit } from "@/lib/engine";
 import { isFlagged, type Mapping } from "@/lib/job-fields";
-import { scoreListing, type ProductBrief } from "@/lib/rules";
+import { checkListing, scoreListing, type ProductBrief } from "@/lib/rules";
 
 const refresh = () => revalidatePath("/", "layout");
 const clamp = (v: unknown, min: number, max: number, fallback: number) => {
@@ -266,7 +266,13 @@ export async function processJobItemAction(jobId: number, index: number): Promis
     let lastError: unknown = null;
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        made = await generateJobItem(provider, brief, m, job.tone, known, unknown);
+        const failedChecks = item.content
+          ? checkListing(item.content, m, { brand: brief.brand, keywords: brief.keywords }).filter((check) => !check.pass)
+          : [];
+        const correctionNotes = failedChecks.length
+          ? "Fix these marketplace compliance failures from the previous draft: " + failedChecks.map((check) => check.id + ": " + (check.detail || "failed")).join("; ") + ". Correct every fixable issue while preserving accurate product facts. Do not invent product specifications or claims."
+          : "";
+made = await generateJobItem(provider, brief, m, job.tone, known, unknown, correctionNotes);
         break;
       } catch (error) {
         lastError = error;
@@ -298,6 +304,20 @@ export async function processJobItemAction(jobId: number, index: number): Promis
   }
 }
 
+export async function autoFixAllJobItemsAction(jobId: number): Promise<{ ok: boolean; count: number; error?: string }> {
+  await requireUser();
+  await ensureDb();
+  const [job] = await db.select().from(jobs).where(eq(jobs.id, jobId));
+  if (!job || job.type !== "listing" || job.imported) return { ok: false, count: 0, error: "This listing batch cannot be edited." };
+  const provider = await getAiProvider();
+  if (!provider) return { ok: false, count: 0, error: "Connect your existing AI provider in Settings before running Auto-Fix." };
+  const items = job.items.map((item) => item.content && item.status === "done" ? { ...item, status: "pending" as const, error: undefined } : item);
+  const count = items.filter((item) => item.status === "pending" && Boolean(item.content)).length;
+  if (!count) return { ok: false, count: 0, error: "There are no completed listings to auto-fix." };
+  await db.update(jobs).set({ items, status: "running" }).where(eq(jobs.id, jobId));
+  refresh();
+  return { ok: true, count };
+}
 export async function retryFailedJobItemsAction(jobId: number): Promise<{ ok: boolean; count: number }> {
   await requireUser();
   await ensureDb();
