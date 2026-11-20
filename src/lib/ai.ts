@@ -15,7 +15,7 @@ export type ProviderId = "gemini" | "openrouter";
 export type AiProvider = { id: ProviderId; label: string; model: string; key: string; source: "env" | "settings" };
 
 export const PROVIDERS: Record<ProviderId, { label: string; defaultModel: string }> = {
-  gemini: { label: "Google Gemini Free", defaultModel: "gemini-2.5-flash-lite" },
+  gemini: { label: "Google Gemini Free", defaultModel: "gemini-3.5-flash-lite" },
   openrouter: { label: "OpenRouter Free", defaultModel: "baidu/ernie-5.5-flash-preview:free" },
 };
 export const isProviderId = (v: unknown): v is ProviderId => typeof v === "string" && v in PROVIDERS;
@@ -307,20 +307,34 @@ async function post(url: string, headers: Record<string, string>, body: unknown,
 /** One request to whichever provider is connected. Returns the raw text of the reply. */
 async function callModel(p: AiProvider, system: string, user: string, json: boolean): Promise<string> {
   if (p.id === "gemini") {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${PROVIDERS.gemini.defaultModel}:generateContent?key=${encodeURIComponent(p.key)}`, {
+    // Google recommends the Interactions API for current Gemini models.
+    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        "x-goog-api-key": p.key,
+      },
       body: JSON.stringify({
-        systemInstruction: { parts: [{ text: system }] },
-        contents: [{ role: "user", parts: [{ text: user }] }],
-        generationConfig: { maxOutputTokens: 4000, ...(json ? { responseMimeType: "application/json" } : {}) },
+        model: PROVIDERS.gemini.defaultModel,
+        input: `${system}\n\nUSER REQUEST:\n${user}`,
+        store: false,
+        ...(json ? { response_format: { type: "text", mime_type: "application/json" } } : {}),
       }),
       signal: AbortSignal.timeout(60_000),
       cache: "no-store",
     });
-    const data = await response.json().catch(() => null) as { candidates?: { content?: { parts?: { text?: string }[] } }[]; error?: { message?: string } } | null;
+    const data = await response.json().catch(() => null) as {
+      steps?: { type?: string; content?: { type?: string; text?: string }[] }[];
+      output_text?: string;
+      error?: { message?: string };
+    } | null;
     if (!response.ok) throw new Error(`Google Gemini (${response.status}): ${data?.error?.message || response.statusText || "request failed"}`);
-    const result = data?.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("").trim();
+    const result = data?.output_text?.trim()
+      || data?.steps?.filter((step) => step.type === "model_output")
+        .flatMap((step) => step.content ?? [])
+        .filter((part) => part.type === "text")
+        .map((part) => part.text ?? "")
+        .join("").trim();
     if (!result) throw new Error("Google Gemini returned an empty response.");
     return result;
   }
