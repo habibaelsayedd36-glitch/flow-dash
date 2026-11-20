@@ -219,14 +219,14 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
         throw new Error("The free Hugging Face GPU queue is busy or unavailable. Please try again shortly.");
       }
       const stream = await resultResponse.text();
-      const events = stream.split(/\\n(?=event:)/);
+      const events = stream.split(/\n(?=event:)/);
       const completed = events.find((event) => /^event: complete\\s*$/m.test(event));
       if (!completed) {
         const errorEvent = events.find((event) => /^event: error\\s*$/m.test(event));
-        const detail = errorEvent?.split("\\n").find((line) => line.startsWith("data:"))?.slice(5).trim();
+        const detail = errorEvent?.split("\n").find((line) => line.startsWith("data:"))?.slice(5).trim();
         throw new Error(detail || "The free Hugging Face Space did not complete the image job. It may be busy; please retry.");
       }
-      const dataLine = completed.split("\\n").find((line) => line.startsWith("data:"));
+      const dataLine = completed.split("\n").find((line) => line.startsWith("data:"));
       if (!dataLine) throw new Error("The image service returned an empty result.");
       const resultPayload = JSON.parse(dataLine.slice(5).trim()) as unknown;
       const imageUrl = findImageUrl(resultPayload);
