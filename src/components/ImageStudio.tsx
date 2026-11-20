@@ -407,10 +407,12 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
                       <Trash2 size={15} aria-hidden />
                     </button>
                   </div>
-                  <button type="button" className="btn btn-secondary btn-sm w-full" onClick={() => removeWithPixelcut(s)} disabled={pixelcutBusy.includes(s.id)}>
-                    {pixelcutBusy.includes(s.id) ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <ImagePlus size={14} aria-hidden />}
-                    {pixelcutBusy.includes(s.id) ? "Removing with Pixelcut…" : s.pixelcutBlob ? "Run Pixelcut again" : "Remove background with Pixelcut"}
-                  </button>
+                  {mode === "shots" && (
+                    <button type="button" className="btn btn-secondary btn-sm w-full" onClick={() => removeWithPixelcut(s)} disabled={pixelcutBusy.includes(s.id)}>
+                      {pixelcutBusy.includes(s.id) ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <ImagePlus size={14} aria-hidden />}
+                      {pixelcutBusy.includes(s.id) ? "Removing with Pixelcut…" : s.pixelcutBlob ? "Run Pixelcut again" : "Remove background with Pixelcut"}
+                    </button>
+                  )}
                   {mode === "cleanup" && (
                     <button type="button" className="btn btn-primary btn-sm w-full" onClick={() => generateWithFlux(s)} disabled={s.state !== "done" || fluxBusy.includes(s.id)}>
                       {fluxBusy.includes(s.id) ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <WandSparkles size={14} aria-hidden />}
