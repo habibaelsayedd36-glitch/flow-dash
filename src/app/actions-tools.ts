@@ -91,7 +91,7 @@ export async function saveCloudflareFluxKeyAction(_prev: KeyState, fd: FormData)
   const nextAccount = accountId || oldAccount;
   const nextToken = token || oldToken;
   if (!/^[a-f0-9]{32}$/i.test(nextAccount)) return { ok: false, error: "Enter a valid 32-character Cloudflare Account ID." };
-  if (nextToken.length < 20 || nextToken.length > 500 || /\\s/.test(nextToken)) return { ok: false, error: "Enter a valid Cloudflare API token." };
+  if (nextToken.length < 20 || nextToken.length > 500 || /\s/.test(nextToken)) return { ok: false, error: "Enter a valid Cloudflare API token." };
   await setSetting("cloudflare_account_id", nextAccount);
   if (token) await setSetting("cloudflare_flux_token", token);
   refresh();
