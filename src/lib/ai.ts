@@ -494,22 +494,22 @@ Return ONLY the complete JSON object in this exact shape:
     // Last-resort deterministic repair: preserve each model-written product
     // fact and add neutral shopper guidance already used by FLOW's template
     // engine. This adds no specifications or product-performance claims.
-    const enFacts = brief.features.split(/\\r?\\n/).map((s) => s.replace(/^[-•*\\s]+/, "").trim()).filter(Boolean);
-    const arFacts = brief.featuresAr.split(/\\r?\\n/).map((s) => s.replace(/^[-•*\\s]+/, "").trim()).filter(Boolean);
+    const enFacts = brief.features.split(/\r?\n/).map((s) => s.replace(/^[-•*\s]+/, "").trim()).filter(Boolean);
+    const arFacts = brief.featuresAr.split(/\r?\n/).map((s) => s.replace(/^[-•*\s]+/, "").trim()).filter(Boolean);
     const enFallback = enFacts.length ? enFacts : [brief.name.trim()];
     const arFallback = arFacts.length ? arFacts : [brief.nameAr.trim()];
     const enSuffix = " Use this stated detail to compare options and check whether the product matches your needs before purchase.";
     const arSuffix = " وتساعدك هذه المعلومة على مقارنة الخيارات والتأكد من ملاءمة المنتج لاحتياجك قبل الشراء.";
     const fit = (source: string, fallback: string, suffix: string) => {
-      const base = (source || fallback).trim().replace(/[.!،؛,\\s]+$/u, "");
+      const base = (source || fallback).trim().replace(/[.!،؛,\s]+$/u, "");
       const room = Math.max(0, max - suffix.length - 1);
-      const shortened = base.length > room ? base.slice(0, room).replace(/\\s+\\S*$/u, "").trim() : base;
+      const shortened = base.length > room ? base.slice(0, room).replace(/\s+\\S*$/u, "").trim() : base;
       let result = shortened + suffix;
       if (result.length < min && fallback && fallback !== source) {
-        const safeFallback = fallback.trim().replace(/[.!،؛,\\s]+$/u, "");
+        const safeFallback = fallback.trim().replace(/[.!،؛,\s]+$/u, "");
         const fallbackRoom = Math.max(0, max - suffix.length - 1);
         const fallbackBase = safeFallback.length > fallbackRoom
-          ? safeFallback.slice(0, fallbackRoom).replace(/\\s+\\S*$/u, "").trim()
+          ? safeFallback.slice(0, fallbackRoom).replace(/\s+\\S*$/u, "").trim()
           : safeFallback;
         result = fallbackBase + suffix;
       }
@@ -688,7 +688,7 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
           if (/format=rss/i.test(searchUrl)) {
             const items = searchText.match(/<item\b[\s\S]*?<\/item>/gi) ?? [];
             for (const item of items) {
-              const getTag = (tag: string) => item.match(new RegExp("<" + tag + "[^>]*>([\\s\\S]*?)</" + tag + ">", "i"))?.[1] ?? "";
+              const getTag = (tag: string) => item.match(new RegExp("<" + tag + "[^>]*>([\s\\S]*?)</" + tag + ">", "i"))?.[1] ?? "";
               const rawUrl = getTag("link").replace(/<!\[CDATA\[|\]\]>/g, "").trim();
               const title = getTag("title").replace(/<!\[CDATA\[|\]\]>/g, "").replace(/<[^>]+>/g, " ").trim();
               const snippet = getTag("description").replace(/<!\[CDATA\[|\]\]>/g, "").replace(/<[^>]+>/g, " ").trim();
