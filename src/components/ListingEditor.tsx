@@ -117,41 +117,55 @@ export function ListingEditor(props: {
       return { ...c, bulletsEn: pad(c.bulletsEn), bulletsAr: pad(c.bulletsAr) };
     });
 
-  const persist = async () => {
-    const res = await saveListingAction(listingId, content);
-    if (res.ok) {
-      setSaved(content);
-      setOrigin((o) => ({ ...o, edited: true }));
+  const persist = async (): Promise<string | null> => {
+    try {
+      const res = await saveListingAction(listingId, content);
+      if (res.ok) {
+        setSaved(content);
+        setOrigin((o) => ({ ...o, edited: true }));
+        return null;
+      }
+      return res.error || t.common.failed;
+    } catch (error) {
+      return error instanceof Error ? error.message : t.common.failed;
     }
-    return res.ok;
   };
 
   const save = async () => {
     setBusy("save");
-    const ok = await persist();
+    const error = await persist();
     setBusy("");
-    setNotice(ok ? t.editor.saved : t.common.failed);
+    setNotice(error || t.editor.saved);
   };
 
   const changeStatus = async (next: string) => {
     setBusy("status");
-    if (dirty && !(await persist())) {
-      setBusy("");
-      setNotice(t.common.failed);
-      return;
+    if (dirty) {
+      const saveError = await persist();
+      if (saveError) {
+        setBusy("");
+        setNotice(saveError);
+        return;
+      }
     }
     const res = await setListingStatusAction(listingId, next);
     setBusy("");
-    if (!res.ok) return setNotice(t.common.failed);
+    if (!res.ok) return setNotice(res.error || t.common.failed);
     setStatus(next);
     setNotice(res.ran > 0 ? `${label(t.listingStatus, next)} · ${tpl(t.editor.ran, { n: res.ran })}` : label(t.listingStatus, next));
   };
 
   const regenerate = async () => {
     setBusy("regen");
-    const res = await regenerateListingAction(listingId, { features: brief.features, featuresAr: brief.featuresAr, keywords: brief.keywords, marketplace: brief.market, tone: brief.tone, notes: brief.notes });
+    let res: Awaited<ReturnType<typeof regenerateListingAction>>;
+    try {
+      res = await regenerateListingAction(listingId, { features: brief.features, featuresAr: brief.featuresAr, keywords: brief.keywords, marketplace: brief.market, tone: brief.tone, notes: brief.notes });
+    } catch (error) {
+      setBusy("");
+      return setNotice(error instanceof Error ? error.message : t.common.failed);
+    }
     setBusy("");
-    if (!res.ok) return setNotice(t.common.failed);
+    if (!res.ok) return setNotice(res.error || t.common.failed);
     setContent(res.content);
     setSaved(res.content);
     if (isMarketplace(res.marketplace)) setMarketplace(res.marketplace);
@@ -187,7 +201,7 @@ export function ListingEditor(props: {
       });
       if (!res.ok) {
         setBusy("");
-        setNotice(t.common.failed);
+        setNotice(res.error || t.common.failed);
         return;
       }
       nextResult = res;
