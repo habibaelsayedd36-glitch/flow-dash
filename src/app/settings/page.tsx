@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import { AiKeyForm } from "@/components/AiKeyForm";
 import { DeleteAllDataButton } from "@/components/DeleteAllDataButton";
 import { PageHeader } from "@/components/ui";
-import { PROVIDERS, getAiProvider, getOpenRouterVisionKey, getPixelAiKey, maskKey, type ProviderId } from "@/lib/ai";
+import { PROVIDERS, getAiProvider, getOpenRouterVisionKey, getPixelAiKey, getCloudflareFluxConfig, maskKey, type ProviderId } from "@/lib/ai";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Settings & AI Key" };
@@ -20,7 +20,7 @@ const SAMPLE = `{
 }`;
 
 export default async function SettingsPage() {
-  const [provider, visionKey, pixelAiKey, h] = await Promise.all([getAiProvider(), getOpenRouterVisionKey(), getPixelAiKey(), headers()]);
+  const [provider, visionKey, pixelAiKey, fluxConfig, h] = await Promise.all([getAiProvider(), getOpenRouterVisionKey(), getPixelAiKey(), getCloudflareFluxConfig(), headers()]);
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "your-dashboard-address";
   const endpoint = `${h.get("x-forwarded-proto") ?? "https"}://${host}/api/leads`;
   const code = "mt-1.5 overflow-x-auto rounded-xl bg-flow-bg-soft px-4 py-3 font-mono text-[13px] leading-relaxed text-foreground";
@@ -77,7 +77,7 @@ export default async function SettingsPage() {
               <li>Workflow Engine: the rule that drafts a listing when a product reaches Listing optimization.</li>
               <li>Reviews & Health: reply drafts, which a person edits and posts.</li>
             </ul>
-            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">Image Clean-up runs locally in your browser and does not use an AI key. Product photo analysis can use a free OpenRouter vision model. Generating new Side, Back or Detail views from a reference photo is disabled in Free mode because available free models cannot reliably preserve the exact product while editing it.</p>
+            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">Image Clean-up includes local background removal plus optional FLUX.2 Klein 4B image editing through your connected Cloudflare Workers AI account. AI edits can still alter small label text, so compare every result with the original before publishing.</p>
           </section>
 
           <aside className="flex gap-3 rounded-2xl border border-amber-300 bg-amber-soft p-4 sm:p-5">
