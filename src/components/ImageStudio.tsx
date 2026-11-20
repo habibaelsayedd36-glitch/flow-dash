@@ -432,13 +432,13 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
             {shots.map((s) => (
               <li key={s.id} className="card overflow-hidden">
                 <div className="grid grid-cols-2 gap-px bg-line">
-                  <figure className="bg-sage-soft">
+                  <figure className="bg-white">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={s.original} alt={`Original: ${s.file.name}`} className="aspect-square w-full object-contain" />
                     <figcaption className="eyebrow px-3 py-2">Original</figcaption>
                   </figure>
                   <figure className="bg-sage-soft">
-                    <div className="grid aspect-square w-full place-items-center">
+                    <div className="grid aspect-square w-full place-items-center bg-white">
                       {s.preview ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={s.preview} alt={`Cleaned: ${s.file.name}`} className="size-full object-contain p-2" />
