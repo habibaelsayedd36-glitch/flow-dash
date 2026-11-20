@@ -222,9 +222,23 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
       const events = stream.split(/\n(?=event:)/);
       const completed = events.find((event) => /^event: complete\s*$/m.test(event));
       if (!completed) {
-        const errorEvent = events.find((event) => /^event: error\s*$/m.test(event));
-        const detail = errorEvent?.split("\n").find((line) => line.startsWith("data:"))?.slice(5).trim();
-        throw new Error(detail || "The free Hugging Face Space did not complete the image job. It may be busy; please retry.");
+        const errorEvent = events.find((event) => /^event: error\\s*$/m.test(event));
+        const dataLine = errorEvent?.split("\n").find((line) => line.startsWith("data:"));
+        const rawDetail = dataLine?.slice(5).trim() ?? "";
+        let detail = "";
+        if (rawDetail && rawDetail !== "null" && rawDetail !== "undefined") {
+          try {
+            const parsed: unknown = JSON.parse(rawDetail);
+            if (typeof parsed === "string") detail = parsed;
+            else if (parsed && typeof parsed === "object") {
+              const info = parsed as Record<string, unknown>;
+              detail = String(info.message || info.error || info.detail || "");
+            }
+          } catch {
+            detail = rawDetail;
+          }
+        }
+        throw new Error(detail || "Hugging Face returned an empty error response. The free Space may be restarting or its GPU queue may be unavailable. Please wait a minute and retry.");
       }
       const dataLine = completed.split("\n").find((line) => line.startsWith("data:"));
       if (!dataLine) throw new Error("The image service returned an empty result.");
