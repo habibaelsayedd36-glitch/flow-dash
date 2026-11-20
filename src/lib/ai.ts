@@ -454,7 +454,7 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
     "openrouter/free",
     "baidu/ernie-5.5-flash-preview:free",
   ]));
-  let data: { choices?: { message?: { content?: string } }[] } | undefined;
+  let data: { choices?: { message?: { content?: unknown } }[] } | undefined;
   let lastError: unknown;
   for (const model of freeModels) {
     try {
