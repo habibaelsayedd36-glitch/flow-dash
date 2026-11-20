@@ -30,14 +30,13 @@ export async function POST(request: NextRequest) {
     }
 
     const prompt = [
-      "Edit the supplied reference photo into one photorealistic premium ecommerce MAIN product photograph.",
-      "Keep the exact same physical product from the reference image. This is a faithful photo retouch, not a redesign or a new product.",
-      "CRITICAL LABEL LOCK: preserve every label exactly as photographed, including all printed words, letters, numbers, logos, brand marks, typography, layout, icons, barcodes, colors and label placement. Do not rewrite, translate, correct, replace, invent, remove or stylize any label content.",
-      "Preserve the product's exact silhouette, geometry, proportions, cap, pump, closure, packaging, material, finish and original colors. Do not add accessories or extra objects.",
-      "Use a perfectly pure seamless white #FFFFFF background, square composition, front-facing catalog view, centered upright product, fully visible with safe margins, occupying about 85 percent of the frame.",
-      "Create polished commercial studio lighting, accurate white balance, crisp realistic edges, natural material reflections and a subtle realistic contact shadow directly underneath.",
-      "No props, no scenery, no gradients, no colored backdrop, no extra text, no watermark, no frame.",
-      "When a detail is uncertain, preserve the reference rather than guessing."
+      "Re-generate the entire photograph with AI as a brand-new, photorealistic premium ecommerce MAIN product image. Do not merely erase the background, apply a filter, or make a minor retouch.",
+      "Use the uploaded photo as the visual reference for the exact product identity, then render a fresh professional studio photograph with a newly synthesized clean composition, lighting, shadows, and white studio environment.",
+      "The physical product must remain recognizably the same item: preserve its silhouette, geometry, proportions, cap, pump, closure, packaging shape, material, finish, and original colors. Do not redesign the product, add accessories, or create extra products.",
+      "LABEL FIDELITY IS A PRIORITY: reproduce the visible label layout, brand mark, typography, icons, and printed wording as closely as possible to the reference. Never invent replacement words or translate label text. If tiny text cannot be reproduced reliably, keep the label visually faithful rather than fabricating new writing.",
+      "Create a perfectly pure seamless white #FFFFFF ecommerce background, square composition, front-facing catalog view, centered upright product, fully visible with safe margins, occupying about 85 percent of the frame.",
+      "Rebuild the scene with premium commercial studio lighting, accurate white balance, crisp realistic edges, natural material reflections, polished high-end product photography, and a subtle realistic contact shadow directly beneath the product.",
+      "The result must look like a newly generated professional product photograph, not the original photo with only its background removed. No props, scenery, gradients, colored backdrop, extra text, watermark, or frame."
     ].join(" ");
 
     // FLOW caps its own use at 80 fixed 1024px generations per UTC day.
