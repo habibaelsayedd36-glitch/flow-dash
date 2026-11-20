@@ -460,25 +460,44 @@ async function repairShortBullets(
   content: ListingContent,
   tail: string,
 ): Promise<ListingContent> {
-  if (!hasShortBullets(content, m)) return content;
+  let current = content;
   const min = RULES[m].bulletMin;
   const max = RULES[m].bulletMax;
-  const repairPrompt = `The previous draft failed the mandatory bullet-length check. Rewrite the listing JSON below.
-Every one of the exactly 5 English bullets AND exactly 5 Arabic bullets must be at least ${min} characters including spaces and no more than ${max}.
-Keep each English/Arabic pair aligned in meaning and order. Expand each point using only facts from the product brief. Explain the practical meaning of the stated feature without inventing specifications, materials, performance, compatibility, or benefits. Do not pad with repeated phrases. If a fact is too short, combine it with a different supplied fact while keeping the five points distinct.
-Preserve all other fields where possible. Return only the required JSON object.
+
+  // Some free-tier models ignore the length constraint on the first correction.
+  // Give the model multiple targeted chances, explicitly identifying each short
+  // bullet and its current character count instead of failing the whole product.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (!hasShortBullets(current, m)) return current;
+
+    const shortItems = [
+      ...current.bulletsEn.map((value, index) => ({ language: "English", index: index + 1, value })),
+      ...current.bulletsAr.map((value, index) => ({ language: "Arabic", index: index + 1, value })),
+    ].filter((item) => item.value.trim().length < min || item.value.trim().length > max);
+    const repairPrompt = `The listing failed a strict marketplace validation. This is correction attempt ${attempt + 1} of 3.
+Rewrite ONLY the bullet arrays while preserving the title, descriptions and search terms.
+There must be exactly ${RULES[m].bullets} English bullets and ${RULES[m].bullets} Arabic bullets.
+EVERY bullet must be between ${min} and ${max} characters INCLUDING spaces. Count the characters before returning JSON.
+The following bullets are invalid; each needs a substantive rewrite, not a tiny edit:
+${shortItems.map((item) => `- ${item.language} bullet ${item.index} (${item.value.trim().length} chars): ${item.value}`).join("\\n")}
+Use the confirmed product facts below to make each bullet informative and long enough. Explain a different practical use or stated feature in each bullet. Never invent specifications, materials, performance, compatibility or accessories. Do not repeat the same sentence or add meaningless padding.
 Product brief:
 ${userPrompt(brief, m, "clear", "", tail)}
-Previous draft:
-${JSON.stringify(content)}
-Required JSON shape:
+Current listing JSON:
+${JSON.stringify(current)}
+Return ONLY the complete JSON object in this exact shape:
 {${LISTING_SHAPE}}`;
-  const repaired = toListing(await callListingJson(p, SYSTEM, repairPrompt), m);
-  if (hasShortBullets(repaired, m)) {
-    const short = [...repaired.bulletsEn, ...repaired.bulletsAr].filter((bullet) => bullet.trim().length < min).length;
-    throw new Error(`${p.label}: generated bullets still fail the ${min}-character minimum (${short} short bullets). Add more product facts or retry after the provider limit resets.`);
+    current = toListing(await callListingJson(p, SYSTEM, repairPrompt), m);
   }
-  return repaired;
+
+  if (hasShortBullets(current, m)) {
+    const short = [
+      ...current.bulletsEn,
+      ...current.bulletsAr,
+    ].filter((bullet) => bullet.trim().length < min).length;
+    throw new Error(`${p.label}: the model returned ${short} bullets below the ${min}-character minimum after 3 correction attempts. Add more confirmed product facts or retry later.`);
+  }
+  return current;
 }
 
 type ProductResearch = { brief: ProductBrief; sources: string[] };
