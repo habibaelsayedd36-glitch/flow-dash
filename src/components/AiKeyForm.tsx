@@ -9,7 +9,8 @@ type Current = { id: string; label: string; model: string; masked: string; sourc
 
 export function AiKeyForm({ providers, current, visionMasked, pixelAiMasked, cloudflareAccountId = "", cloudflareTokenMasked = "" }: { providers: ProviderOpt[]; current: Current; visionMasked: string; pixelAiMasked: string; cloudflareAccountId?: string; cloudflareTokenMasked?: string }) {
   const [provider, setProvider] = useState(current?.id ?? providers[0].id);
-  const [state, action, saving] = useActionState<KeyState, FormData>(saveAiKeyAction, {});\n  const [fluxState, fluxAction, savingFlux] = useActionState<{ ok?: boolean; error?: string }, FormData>(saveCloudflareFluxKeyAction, {});
+  const [state, action, saving] = useActionState<KeyState, FormData>(saveAiKeyAction, {});
+  const [fluxState, fluxAction, savingFlux] = useActionState<{ ok?: boolean; error?: string }, FormData>(saveCloudflareFluxKeyAction, {});
   const [test, setTest] = useState<{ ok: boolean; message: string } | null>(null);
   const [testing, setTesting] = useState(false);
   const [removing, startRemove] = useTransition();
