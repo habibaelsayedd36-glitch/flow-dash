@@ -28,6 +28,7 @@ export function JobRunner({ jobId, items, hasClient, clientName, imported, statu
   const [includeEstimates, setIncludeEstimates] = useState(false);
   const [busy, setBusy] = useState<"" | "import" | number>("");
   const [notice, setNotice] = useState("");
+  const [workerError, setWorkerError] = useState("");
   const started = useRef(false);
   const pauseRequested = useRef(false);
   const [pausing, setPausing] = useState(false);
@@ -46,8 +47,10 @@ export function JobRunner({ jobId, items, hasClient, clientName, imported, statu
         try {
           const result = await processJobItemAction(jobId, index);
           if (result.pause) cancelled = true;
-        } catch {
-          // left pending: it is retried on the next load
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "The listing request failed unexpectedly.";
+          setWorkerError(message);
+          cancelled = true;
         }
         setProcessed((n) => n + 1);
       }
@@ -121,6 +124,7 @@ export function JobRunner({ jobId, items, hasClient, clientName, imported, statu
 
   return (
     <div className="flex flex-col gap-4">
+      {workerError && <p role="alert" className="rounded-xl border border-danger/30 bg-danger-soft px-4 py-3 text-sm text-danger">Listing paused after an unexpected server error: {workerError}. Your completed rows are saved. Use Resume saved batch to continue.</p>}
       <section className="grid grid-cols-2 gap-4 xl:grid-cols-4" aria-label="Job summary">
         {[
           { label: "Listings written", value: done.length, hint: aiCount > 0 ? `${aiCount} by AI` : "AI generated" },
