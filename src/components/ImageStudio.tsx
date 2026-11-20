@@ -205,11 +205,11 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
           throw new Error(`Hugging Face could not read the ${endpoint} result (HTTP ${result.status}).`);
         }
         const stream = await result.text();
-        const events = stream.split(/\\r?\\n(?=event:)/);
-        const completed = events.find((event) => /^event:\\s*complete\\s*$/m.test(event));
+        const events = stream.split(/\r?\n(?=event:)/);
+        const completed = events.find((event) => /^event:\s*complete\s*$/m.test(event));
         if (!completed) {
-          const errorEvent = events.find((event) => /^event:\\s*error\\s*$/m.test(event));
-          const dataLine = errorEvent?.split(/\\r?\\n/).find((line) => line.startsWith("data:"));
+          const errorEvent = events.find((event) => /^event:\s*error\s*$/m.test(event));
+          const dataLine = errorEvent?.split(/\r?\n/).find((line) => line.startsWith("data:"));
           const rawDetail = dataLine?.slice(5).trim() ?? "";
           let detail = "";
           if (rawDetail && rawDetail !== "null" && rawDetail !== "undefined") {
@@ -226,14 +226,14 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
           }
           throw new Error(detail || `Hugging Face returned no details for ${endpoint}. Raw response: ${stream.slice(0, 700)}`);
         }
-        const dataLine = completed.split(/\\r?\\n/).find((line) => line.startsWith("data:"));
+        const dataLine = completed.split(/\r?\n/).find((line) => line.startsWith("data:"));
         if (!dataLine) throw new Error(`Hugging Face returned an empty ${endpoint} result.`);
         return JSON.parse(dataLine.slice(5).trim()) as unknown;
       };
 
-      // The live API docs expose this tab-selection endpoint and list exactly
-      // nine inputs for generation (no mode/state input).
-      await runSpaceEndpoint("on_select_i2i", []);
+      // The published generation endpoint already exposes the image-to-image
+      // inputs directly. Do not call the UI tab-selection callback: that callback
+      // is not reliably routable from the public API and is unnecessary here.
       const resultPayload = await runSpaceEndpoint("generate_images", [
         "",
         productPrompt,
