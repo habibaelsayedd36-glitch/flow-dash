@@ -288,49 +288,59 @@ export async function regenerateListingAction(listingId: number, input: Regenera
 const clean = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
 const cleanList = (v: unknown) => (Array.isArray(v) ? v.slice(0, 8).map((b) => clean(b, 600)).filter(Boolean) : []);
 
-export async function saveListingAction(listingId: number, input: ListingContent): Promise<{ ok: boolean }> {
-  await requireUser();
-  await ensureDb();
-  const [row] = await db
-    .select({ listing: listings, product: products })
-    .from(listings)
-    .innerJoin(products, eq(listings.productId, products.id))
-    .where(eq(listings.id, listingId));
-  if (!row || !isMarketplace(row.listing.marketplace)) return { ok: false };
-  const content: ListingContent = {
-    titleEn: clean(input?.titleEn, 400),
-    titleAr: clean(input?.titleAr, 400),
-    bulletsEn: cleanList(input?.bulletsEn),
-    bulletsAr: cleanList(input?.bulletsAr),
-    descriptionEn: clean(input?.descriptionEn, 10_000),
-    descriptionAr: clean(input?.descriptionAr, 10_000),
-    searchTerms: clean(input?.searchTerms, 1000),
-  };
-  await db
-    .update(listings)
-    .set({ ...content, edited: true, score: scoreListing(content, row.listing.marketplace, briefOf(row.product)), updatedAt: new Date() })
-    .where(eq(listings.id, listingId));
-  refresh();
-  return { ok: true };
+export async function saveListingAction(listingId: number, input: ListingContent): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireUser();
+    await ensureDb();
+    const [row] = await db
+      .select({ listing: listings, product: products })
+      .from(listings)
+      .innerJoin(products, eq(listings.productId, products.id))
+      .where(eq(listings.id, listingId));
+    if (!row || !isMarketplace(row.listing.marketplace)) {
+      return { ok: false, error: "This listing could not be found. Refresh the page and try again." };
+    }
+    const content: ListingContent = {
+      titleEn: clean(input?.titleEn, 400),
+      titleAr: clean(input?.titleAr, 400),
+      bulletsEn: cleanList(input?.bulletsEn),
+      bulletsAr: cleanList(input?.bulletsAr),
+      descriptionEn: clean(input?.descriptionEn, 10_000),
+      descriptionAr: clean(input?.descriptionAr, 10_000),
+      searchTerms: clean(input?.searchTerms, 1000),
+    };
+    await db
+      .update(listings)
+      .set({ ...content, edited: true, score: scoreListing(content, row.listing.marketplace, briefOf(row.product)), updatedAt: new Date() })
+      .where(eq(listings.id, listingId));
+    refresh();
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message.slice(0, 300) : "Could not save this listing. Please retry." };
+  }
 }
 
-export async function setListingStatusAction(listingId: number, status: string): Promise<{ ok: boolean; ran: number }> {
-  await requireUser();
-  await ensureDb();
-  if (!(LISTING_STATUSES as readonly string[]).includes(status)) return { ok: false, ran: 0 };
-  const [row] = await db
-    .update(listings)
-    .set({ status, updatedAt: new Date() })
-    .where(eq(listings.id, listingId))
-    .returning({ productId: listings.productId });
-  if (!row) return { ok: false, ran: 0 };
-  const [product] = await db.select().from(products).where(eq(products.id, row.productId));
-  let results: RunResult[] = [];
-  const ctx = { productId: row.productId, clientId: product?.clientId, listingId };
-  if (status === "approved") results = await emit("listing_approved", ctx);
-  if (status === "published") results = await emit("listing_published", ctx);
-  refresh();
-  return { ok: true, ran: fired(results) };
+export async function setListingStatusAction(listingId: number, status: string): Promise<{ ok: boolean; ran: number; error?: string }> {
+  try {
+    await requireUser();
+    await ensureDb();
+    if (!(LISTING_STATUSES as readonly string[]).includes(status)) return { ok: false, ran: 0, error: "Invalid listing status." };
+    const [row] = await db
+      .update(listings)
+      .set({ status, updatedAt: new Date() })
+      .where(eq(listings.id, listingId))
+      .returning({ productId: listings.productId });
+    if (!row) return { ok: false, ran: 0, error: "This listing could not be found. Refresh the page and try again." };
+    const [product] = await db.select().from(products).where(eq(products.id, row.productId));
+    let results: RunResult[] = [];
+    const ctx = { productId: row.productId, clientId: product?.clientId, listingId };
+    if (status === "approved") results = await emit("listing_approved", ctx);
+    if (status === "published") results = await emit("listing_published", ctx);
+    refresh();
+    return { ok: true, ran: fired(results) };
+  } catch (error) {
+    return { ok: false, ran: 0, error: error instanceof Error ? error.message.slice(0, 300) : "Could not update the listing status. Please retry." };
+  }
 }
 
 // -------------------------------------------------------------- automations
