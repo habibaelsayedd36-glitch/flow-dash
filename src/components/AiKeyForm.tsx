@@ -138,7 +138,7 @@ export function AiKeyForm({ providers, current, visionMasked, pixelAiMasked, clo
         <form action={fluxAction} className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
           <input name="cloudflareAccountId" className="field min-w-0" defaultValue={cloudflareAccountId} placeholder="Cloudflare Account ID (32 characters)" autoComplete="off" spellCheck={false} />
           <input name="cloudflareFluxToken" type="password" className="field min-w-0" placeholder={cloudflareTokenMasked ? "Paste a new token to replace it" : "Cloudflare API token"} autoComplete="off" spellCheck={false} />
-          <p className="text-[12px] leading-relaxed text-mute sm:col-span-2">Create a Cloudflare API token with Workers AI: Read and Workers AI: Run permissions. Leave the token field empty to keep the saved token.</p>
+          <p className="text-[12px] leading-relaxed text-mute sm:col-span-2">Create a Cloudflare API token with Account → Workers AI → Read permission (or Workers AI → Edit/Write). You can create it from Workers AI → Use REST API in Cloudflare. Leave the token field empty to keep the saved token.</p>
           <div className="sm:col-span-2 flex flex-wrap items-center gap-3"><button type="submit" className="btn btn-secondary" disabled={savingFlux}>{savingFlux ? <Loader2 size={15} className="animate-spin" aria-hidden /> : <KeyRound size={15} aria-hidden />}Save Cloudflare connection</button>{fluxState.error && <p role="alert" className="text-[13px] text-danger">{fluxState.error}</p>}{fluxState.ok && <p role="status" className="text-[13px] text-forest">Cloudflare credentials saved securely.</p>}</div>
         </form>
       </div>
