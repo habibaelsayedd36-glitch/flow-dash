@@ -191,12 +191,10 @@ export async function cutout(file: Blob, strength: number): Promise<Cutout> {
   restoreEnclosedDetails(img, w, h);
   const d = img.data;
   const level = Math.max(0, Math.min(100, strength));
-  // Use a conservative matte threshold. Aggressive thresholds remove real
-  // product pixels at corners, transparent parts and fine edges. Background
-  // cleanup must never trade away the product to chase every soft shadow.
-  // The short smooth transition trims only the weakest fringe.
-  const low = 42 + level * 0.28;
-  const high = 188 + level * 0.12;
+  // Remove more of the low-confidence halo and cast-shadow matte. Keep a
+  // gradual edge transition so the silhouette does not become jagged.
+  const low = 96 + level * 0.36;
+  const high = 218 + level * 0.18;
   for (let i = 0; i < d.length; i += 4) {
     const alpha = d[i + 3];
     if (alpha <= low) {
@@ -217,8 +215,9 @@ export async function cutout(file: Blob, strength: number): Promise<Cutout> {
       const b = d[i + 2];
       const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
       const chroma = Math.max(r, g, b) - Math.min(r, g, b);
-      const boost = chroma < 18 ? 1 : 1.28;
-      const lift = (channel: number) => Math.max(0, Math.min(255, Math.round(luma + (channel - luma) * boost)));
+      const boost = chroma < 24 ? 1 : 1.58;
+      const contrast = (channel: number) => (channel - 128) * 1.08 + 128;
+      const lift = (channel: number) => Math.max(0, Math.min(255, Math.round(contrast(luma) + (contrast(channel) - contrast(luma)) * boost)));
       d[i] = lift(r);
       d[i + 1] = lift(g);
       d[i + 2] = lift(b);
