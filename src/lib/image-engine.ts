@@ -185,14 +185,14 @@ export async function cutout(file: Blob, strength: number): Promise<Cutout> {
   sourceBitmap.close();
   matteBitmap.close();
 
-  // Refine the AI matte gently: suppress faint background haze while keeping
-  // a smooth transition at the product edge. RGB remains the untouched source.
-  // The slider controls how firmly faint edge residue is removed.
+  // Tighten the matte enough to reject low-confidence cast-shadow pixels
+  // around the sides, while retaining a soft antialiased product contour.
   const img = ctx.getImageData(0, 0, w, h);
   restoreEnclosedDetails(img, w, h);
   const d = img.data;
-  const low = 5 + Math.max(0, Math.min(100, strength)) * 0.20;
-  const high = 252 - Math.max(0, Math.min(100, strength)) * 0.22;
+  const level = Math.max(0, Math.min(100, strength));
+  const low = 28 + level * 0.28;
+  const high = 245 - level * 0.12;
   for (let i = 0; i < d.length; i += 4) {
     const alpha = d[i + 3];
     if (alpha <= low) {
@@ -201,8 +201,21 @@ export async function cutout(file: Blob, strength: number): Promise<Cutout> {
       d[i + 3] = 255;
     } else {
       const t = (alpha - low) / (high - low);
-      // Smoothstep keeps antialiased edges soft instead of making them jagged.
       d[i + 3] = Math.round((t * t * (3 - 2 * t)) * 255);
+    }
+
+    // Very restrained product-only color lift: slightly richer saturation
+    // and contrast, without changing geometry, text or logo shapes.
+    if (d[i + 3] > 32) {
+      const r = d[i];
+      const g = d[i + 1];
+      const b = d[i + 2];
+      const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      const saturate = (channel: number) => luma + (channel - luma) * 1.07;
+      const contrast = (channel: number) => Math.max(0, Math.min(255, (channel - 128) * 1.06 + 128));
+      d[i] = Math.round(contrast(saturate(r)));
+      d[i + 1] = Math.round(contrast(saturate(g)));
+      d[i + 2] = Math.round(contrast(saturate(b)));
     }
   }
   ctx.putImageData(img, 0, 0);
