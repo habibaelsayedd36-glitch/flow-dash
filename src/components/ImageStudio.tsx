@@ -222,7 +222,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
       const events = stream.split(/\n(?=event:)/);
       const completed = events.find((event) => /^event: complete\s*$/m.test(event));
       if (!completed) {
-        const errorEvent = events.find((event) => /^event: error\\s*$/m.test(event));
+        const errorEvent = events.find((event) => /^event:\s*error\s*$/m.test(event));
         const dataLine = errorEvent?.split("\n").find((line) => line.startsWith("data:"));
         const rawDetail = dataLine?.slice(5).trim() ?? "";
         let detail = "";
