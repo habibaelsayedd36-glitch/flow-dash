@@ -1,13 +1,13 @@
 "use client";
 
 import { zipSync } from "fflate";
-import { Download, ImagePlus, Loader2, RefreshCw, Trash2, TriangleAlert } from "lucide-react";
+import { Download, ImagePlus, Loader2, RefreshCw, Trash2, TriangleAlert, WandSparkles } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { logImageJobAction } from "@/app/actions-tools";
 import { FLAG_TEXT, IMAGE_PRESETS, ModelLoadError, compose, cutout, toJpeg, type Cutout, type Flag, type PresetId } from "@/lib/image-engine";
 
 type Angle = "front" | "side" | "back" | "detail";
-type Shot = { id: string; file: File; original: string; preview: string | null; cut: Cutout | null; pixelcutBlob?: Blob; flags: Flag[]; state: "queued" | "working" | "done" | "error"; angle: Angle };
+type Shot = { id: string; file: File; original: string; preview: string | null; cut: Cutout | null; pixelcutBlob?: Blob; aiBlob?: Blob; flags: Flag[]; state: "queued" | "working" | "done" | "error"; angle: Angle };
 
 const ANGLES: Angle[] = ["front", "side", "back", "detail"];
 const ANGLE_LABEL: Record<Angle, string> = { front: "Front (main)", side: "Side", back: "Back", detail: "Detail" };
@@ -71,7 +71,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
   const [angleTargets, setAngleTargets] = useState<Exclude<Angle, "front">[]>(["side", "back", "detail"]);
   const [generatingAngles, setGeneratingAngles] = useState(false);
   const [angleStatus, setAngleStatus] = useState("");
-  const [pixelcutBusy, setPixelcutBusy] = useState<string[]>([]);
+  const [pixelcutBusy, setPixelcutBusy] = useState<string[]>([]);\n  const [fluxBusy, setFluxBusy] = useState<string[]>([]);
   const shotsRef = useRef<Shot[]>([]);
   const running = useRef(false);
   const settings = useRef({ tolerance, fill });
@@ -111,6 +111,44 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
     }
   };
 
+  const generateWithFlux = async (shot: Shot) => {
+    if (fluxBusy.includes(shot.id)) return;
+    setFluxBusy((list) => [...list, shot.id]);
+    setMessage("");
+    try {
+      // Cloudflare's multi-reference endpoint requires each reference image to be smaller than 512x512.
+      const bitmap = await createImageBitmap(shot.file);
+      const scale = Math.min(511 / bitmap.width, 511 / bitmap.height, 1);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      const context = canvas.getContext("2d");
+      if (!context) { bitmap.close(); throw new Error("Could not prepare the FLUX reference image."); }
+      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      bitmap.close();
+      const reference = await new Promise<Blob>((resolve, reject) =>
+        canvas.toBlob((value) => value ? resolve(value) : reject(new Error("Could not encode the FLUX reference image.")), "image/png"),
+      );
+      const form = new FormData();
+      form.append("image", reference, "product-reference.png");
+      const response = await fetch("/api/ai-ad/flux", { method: "POST", body: form });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(payload.error || "FLUX.2 Klein image editing failed.");
+      }
+      const blob = await response.blob();
+      if (!blob.size || !blob.type.startsWith("image/")) throw new Error("FLUX returned an invalid image.");
+      const preview = URL.createObjectURL(blob);
+      if (shot.preview) URL.revokeObjectURL(shot.preview);
+      patch(shot.id, { preview, aiBlob: blob });
+      setMessage("FLUX.2 Klein generated a new studio-style image. Check every label against the original before downloading.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "FLUX image editing failed.");
+    } finally {
+      setFluxBusy((list) => list.filter((id) => id !== shot.id));
+    }
+  };
+
   // One photo at a time: full-resolution canvases are large, so the queue never runs in parallel.
   const pump = useCallback(async () => {
     if (running.current) return;
@@ -124,7 +162,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
         const cut = await cutout(next.file, settings.current.tolerance);
         const blob = await toJpeg(compose(cut, 720, settings.current.fill / 100), 0.88);
         if (next.preview) URL.revokeObjectURL(next.preview);
-        patch(next.id, { state: "done", cut, pixelcutBlob: undefined, flags: cut.flags, preview: URL.createObjectURL(blob) });
+        patch(next.id, { state: "done", cut, pixelcutBlob: undefined, aiBlob: undefined, flags: cut.flags, preview: URL.createObjectURL(blob) });
         setModelError(false);
       } catch (e) {
         if (e instanceof ModelLoadError) setModelError(true);
@@ -223,7 +261,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
       return list.filter((x) => x.id !== id);
     });
 
-  const reprocess = () => setShots((list) => list.map((s) => ({ ...s, state: "queued" as const })));
+  const reprocess = () => setShots((list) => list.map((s) => ({ ...s, aiBlob: undefined, state: "queued" as const })));
 
   const done = shots.filter((s) => s.state === "done" && s.cut);
   const flagged = done.filter((s) => s.flags.length > 0).length;
@@ -316,7 +354,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
             <ImagePlus size={22} aria-hidden />
           </span>
           <span className="font-display text-base font-medium text-ink">Drop product photos here, or choose files</span>
-          <span className="max-w-md text-[13px] leading-relaxed text-mute">{mode === "shots" ? "JPEG, PNG or WebP. Local cleanup is automatic. Pixelcut background removal is optional and runs only when you click its button; it uses API credits." : "JPEG, PNG or WebP. Local cleanup is automatic. Pixelcut is an optional paid API action and runs only when you click its button."}</span>
+          <span className="max-w-md text-[13px] leading-relaxed text-mute">{mode === "shots" ? "JPEG, PNG or WebP. Local cleanup is automatic. Pixelcut background removal is optional and runs only when you click its button; it uses API credits." : "JPEG, PNG or WebP. Local cleanup runs automatically. FLUX.2 Klein 4B AI editing is optional and runs only when you click its button."}</span>
           <input type="file" accept="image/*" multiple className="sr-only" onChange={(e) => { add(e.target.files); e.target.value = ""; }} />
         </label>
 
@@ -371,6 +409,12 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
                     {pixelcutBusy.includes(s.id) ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <ImagePlus size={14} aria-hidden />}
                     {pixelcutBusy.includes(s.id) ? "Removing with Pixelcut…" : s.pixelcutBlob ? "Run Pixelcut again" : "Remove background with Pixelcut"}
                   </button>
+                  {mode === "cleanup" && (
+                    <button type="button" className="btn btn-primary btn-sm w-full" onClick={() => generateWithFlux(s)} disabled={s.state !== "done" || fluxBusy.includes(s.id)}>
+                      {fluxBusy.includes(s.id) ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <WandSparkles size={14} aria-hidden />}
+                      {fluxBusy.includes(s.id) ? "Generating with FLUX.2 Klein 4B…" : s.aiBlob ? "Generate again with FLUX.2 Klein 4B" : "Generate with FLUX.2 Klein 4B"}
+                    </button>
+                  )}
                   {s.flags.map((f) => (
                     <p key={f} className="flex gap-2 rounded-lg bg-amber-soft px-3 py-2 text-[13px] leading-snug text-amber-ink">
                       <TriangleAlert size={14} aria-hidden className="mt-0.5 shrink-0" />
@@ -388,8 +432,8 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
         <div>
           <h2 className="h-section">{mode === "cleanup" ? "Output" : "Product and marketplaces"}</h2>
           <p className="mt-1 text-[13px] leading-relaxed text-mute">
-            {mode === "cleanup" ? "Remove the background locally and export the original product photo on pure white. " : "Upload your real product photos, then clean and export them for marketplace image requirements. "}
-            Local background cleanup is automatic. Pixelcut is available as an optional API action and may consume credits.
+            {mode === "cleanup" ? "Remove the background locally, or generate a studio-style edit with FLUX.2 Klein 4B. " : "Upload your real product photos, then clean and export them for marketplace image requirements. "}
+            Local background cleanup is automatic. FLUX.2 Klein 4B is available through your connected Cloudflare Workers AI account; AI editing runs only on click.
           </p>
         </div>
 
