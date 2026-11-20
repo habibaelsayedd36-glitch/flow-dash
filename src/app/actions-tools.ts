@@ -34,15 +34,17 @@ export async function saveAiKeyAction(_prev: KeyState, fd: FormData): Promise<Ke
   const provider = String(fd.get("provider") ?? "");
   const key = String(fd.get("key") ?? "").trim();
   const model = String(fd.get("model") ?? "").trim().slice(0, 80);
-  if (provider !== "openrouter" || !isProviderId(provider)) return { error: "FLOW Free mode only supports OpenRouter free models." };
+  if (!isProviderId(provider)) return { error: "Choose a supported AI provider." };
   const existing = await db.select().from(settings).where(inArray(settings.key, ["ai_provider", "ai_key"]));
   const existingProvider = existing.find((row) => row.key === "ai_provider")?.value ?? "";
   const existingKey = existing.find((row) => row.key === "ai_key")?.value ?? "";
-  if (!key && (!existingKey || existingProvider !== provider)) return { error: "Paste your OpenRouter API key. A key saved for another provider cannot be reused here." };
-  if (key && (key.length < 16 || key.length > 300 || /\s/.test(key))) return { error: "That does not look like an API key." };
+  if (!key && (!existingKey || existingProvider !== provider)) return { error: `Paste your ${provider === "gemini" ? "Google Gemini" : "OpenRouter"} API key.` };
+  if (key && (key.length < 16 || key.length > 500 || /\s/.test(key))) return { error: "That does not look like an API key." };
   await setSetting("ai_provider", provider);
   if (key) await setSetting("ai_key", key);
-  const freeModel = model.endsWith(":free") || model === "openrouter/free" ? model : "baidu/ernie-5.5-flash-preview:free";
+  const freeModel = provider === "gemini"
+    ? "gemini-2.5-flash-lite"
+    : model.endsWith(":free") || model === "openrouter/free" ? model : "baidu/ernie-5.5-flash-preview:free";
   await setSetting("ai_model", freeModel);
   refresh();
   return { ok: true };
