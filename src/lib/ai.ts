@@ -572,11 +572,10 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
   // Only fan out to broader queries if the exact-name search did not return
   // enough candidates. Keep the fallback path conservative and bounded.
   if (results.length < 8) {
-    for (const searchUrl of readerSearchUrls.slice(2)) {
-      const page = await readSearchPage(searchUrl);
-      if (page) addSearchPage(page);
-      if (results.length >= 8) break;
-    }
+    // Fetch fallback search engines together. Sequential requests added several
+    // full network round-trips to listings for products with uncommon names.
+    const fallbackPages = await Promise.all(readerSearchUrls.slice(2).map(readSearchPage));
+    for (const page of fallbackPages) if (page) addSearchPage(page);
   }
 
   // Keep direct RSS/HTML providers as secondary fallbacks, but never depend
