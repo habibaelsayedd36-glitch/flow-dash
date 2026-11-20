@@ -29,6 +29,10 @@ export async function POST(request: NextRequest) {
 
     const incoming = await request.formData();
     const image = incoming.get("image");
+    const customPrompt = incoming.get("prompt");
+    const prompt = typeof customPrompt === "string" && customPrompt.trim()
+      ? customPrompt.trim().slice(0, 8000)
+      : PRODUCT_PROMPT;
     if (!(image instanceof File) || !["image/png", "image/jpeg", "image/webp"].includes(image.type)) {
       return NextResponse.json({ error: "Upload a PNG, JPEG, or WebP product photo." }, { status: 400 });
     }
@@ -37,7 +41,7 @@ export async function POST(request: NextRequest) {
     }
 
     const form = new FormData();
-    form.append("prompt", PRODUCT_PROMPT);
+    form.append("prompt", prompt);
     form.append("input_image_0", image, "product-reference.png");
     form.append("width", "1024");
     form.append("height", "1024");
