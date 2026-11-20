@@ -1,5 +1,5 @@
 import { requireApiUser } from "@/lib/auth/server";
-import { getCloudflareFluxConfig } from "@/lib/ai";
+import { getCloudflareFluxConfig } from "@/lib/ai";\nimport { db } from "@/db";\nimport { settings } from "@/db/schema";\nimport { sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -36,6 +36,63 @@ export async function POST(request: NextRequest) {
       "No props, no scenery, no gradients, no colored backdrop, no extra text, no watermark, no frame.",
       "When a detail is uncertain, preserve the reference rather than guessing."
     ].join(" ");
+
+    // Conservative app-level guard: 80 fixed 1024px generations/day keeps
+    // FLOW below the documented 10,000-Neuron daily free allocation for this model.
+    const dayKey = new Date().toISOString().slice(0, 10);
+    const usageKey = `cloudflare_flux_daily_${dayKey}`;
+    const [usage] = await db.insert(settings).values({ key: usageKey, value: "1" })
+      .onConflictDoUpdate({
+        target: settings.key,
+        set: { value: sql`(CASE WHEN ${settings.value} ~ '^[0-9]+
+    body.append("prompt", prompt);
+    body.append("input_image_0", image, "product-reference.png");
+    body.append("width", "1024");
+    body.append("height", "1024");
+    body.append("guidance", "3.5");
+
+    const upstream = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${MODEL}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body,
+      signal: AbortSignal.timeout(80_000),
+      cache: "no-store",
+    });
+
+    const payload = await upstream.json().catch(() => null) as {
+      success?: boolean;
+      result?: { image?: string };
+      errors?: Array<{ message?: string; code?: number }>;
+      messages?: Array<{ message?: string }>;
+    } | null;
+
+    if (!upstream.ok || !payload?.success || !payload.result?.image) {
+      const detail = payload?.errors?.[0]?.message || payload?.messages?.[0]?.message || `Cloudflare FLUX request failed (HTTP ${upstream.status}).`;
+      const status = upstream.status === 429 ? 429 : upstream.status >= 400 && upstream.status < 500 ? upstream.status : 502;
+      return NextResponse.json({ error: detail.slice(0, 500) }, { status });
+    }
+
+    const bytes = Buffer.from(payload.result.image, "base64");
+    if (!bytes.length || bytes.length > 15_000_000) {
+      return NextResponse.json({ error: "Cloudflare returned an invalid or oversized image." }, { status: 502 });
+    }
+
+    return new NextResponse(bytes, {
+      headers: { "Content-Type": "image/png", "Cache-Control": "no-store" },
+    });
+  } catch (error) {
+    const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+    return NextResponse.json({
+      error: timedOut ? "FLUX.2 Klein 4B timed out. Please retry with a smaller source photo." : error instanceof Error ? error.message : "Unexpected FLUX image editing error.",
+    }, { status: timedOut ? 504 : 500 });
+  }
+}
+ THEN ${settings.value}::integer ELSE 0 END + 1)::text` },
+      })
+      .returning({ value: settings.value });
+    if (Number(usage?.value ?? "1") > 80) {
+      return NextResponse.json({ error: "FLOW's free FLUX daily limit (80 images) has been reached. Try again after the daily reset. No paid fallback is enabled." }, { status: 429 });
+    }
 
     const body = new FormData();
     body.append("prompt", prompt);
