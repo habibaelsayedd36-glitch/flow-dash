@@ -29,6 +29,18 @@ export async function getOpenRouterVisionKey(): Promise<string> {
   }
 }
 
+export async function getCloudflareFluxConfig(): Promise<{ accountId: string; token: string }> {
+  try {
+    const rows = await db.select().from(settings).where(inArray(settings.key, ["cloudflare_account_id", "cloudflare_flux_token"]));
+    return {
+      accountId: rows.find((row) => row.key === "cloudflare_account_id")?.value.trim() ?? "",
+      token: rows.find((row) => row.key === "cloudflare_flux_token")?.value.trim() ?? "",
+    };
+  } catch {
+    return { accountId: "", token: "" };
+  }
+}
+
 export async function getPixelAiKey(): Promise<string> {
   try {
     const rows = await db.select().from(settings).where(inArray(settings.key, ["pixelcut_api_key"]));
