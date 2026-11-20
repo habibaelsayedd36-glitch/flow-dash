@@ -2,7 +2,7 @@ import { requireApiUser } from "@/lib/auth/server";
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 60;
 
 const MODEL = "@cf/black-forest-labs/flux-2-klein-4b";
 const MAX_UPLOAD = 5_000_000;
@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
         const detail = payload?.errors?.map((item) => item.message).filter(Boolean).join("; ");
         return NextResponse.json({ error: detail || "Cloudflare returned no generated image." }, { status: 502 });
       }
-      imageBytes = Buffer.from(encoded.replace(/^data:image\\/[^;]+;base64,/, ""), "base64");
+      imageBytes = Buffer.from(encoded.replace(/^data:[^,]+,/, ""), "base64");
     }
 
     if (!imageBytes.length || imageBytes.length > 15_000_000) {
