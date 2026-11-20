@@ -2,15 +2,16 @@
 
 import { Check, KeyRound, Loader2, PlugZap, Trash2, X } from "lucide-react";
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
-import { removeAiKeyAction, saveAiKeyAction, saveOpenRouterVisionKeyAction, savePixelAiKeyAction, saveCloudflareFluxKeyAction, testAiAction, type KeyState } from "@/app/actions-tools";
+import { removeAiKeyAction, saveAiKeyAction, saveOpenRouterVisionKeyAction, saveOpenRouterFallbackKeyAction, savePixelAiKeyAction, saveCloudflareFluxKeyAction, testAiAction, type KeyState } from "@/app/actions-tools";
 
 type ProviderOpt = { id: string; label: string; defaultModel: string };
 type Current = { id: string; label: string; model: string; masked: string; source: "env" | "settings" } | null;
 
-export function AiKeyForm({ providers, current, visionMasked, pixelAiMasked, cloudflareAccountId = "", cloudflareTokenMasked = "" }: { providers: ProviderOpt[]; current: Current; visionMasked: string; pixelAiMasked: string; cloudflareAccountId?: string; cloudflareTokenMasked?: string }) {
+export function AiKeyForm({ providers, current, visionMasked, fallbackMasked, pixelAiMasked, cloudflareAccountId = "", cloudflareTokenMasked = "" }: { providers: ProviderOpt[]; current: Current; visionMasked: string; fallbackMasked: string; pixelAiMasked: string; cloudflareAccountId?: string; cloudflareTokenMasked?: string }) {
   const [provider, setProvider] = useState(current?.id ?? providers[0].id);
   const [state, action, saving] = useActionState<KeyState, FormData>(saveAiKeyAction, {});
   const [fluxState, fluxAction, savingFlux] = useActionState<{ ok?: boolean; error?: string }, FormData>(saveCloudflareFluxKeyAction, {});
+  const [fallbackState, fallbackAction, savingFallback] = useActionState<KeyState, FormData>(saveOpenRouterFallbackKeyAction, {});
   const [test, setTest] = useState<{ ok: boolean; message: string } | null>(null);
   const [testing, setTesting] = useState(false);
   const [removing, startRemove] = useTransition();
@@ -104,6 +105,20 @@ export function AiKeyForm({ providers, current, visionMasked, pixelAiMasked, clo
           </div>
         </form>
       )}
+
+      <div className="mt-5 border-t border-line pt-5">
+        <h3 className="text-sm font-semibold text-ink">OpenRouter Free · Gemini quota fallback</h3>
+        <p className="mt-1 text-[13px] leading-relaxed text-mute">
+          Add a separate OpenRouter API key here. Your primary Gemini connection stays unchanged. FLOW uses this key only when Gemini's free daily quota is exhausted, and only tries free OpenRouter models.
+          {fallbackMasked ? <> Saved fallback key: <span className="num text-ink">{fallbackMasked}</span>.</> : " No fallback key saved yet."}
+        </p>
+        <form action={fallbackAction} className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <input name="openrouterFallbackKey" type="password" className="field min-w-0 flex-1" placeholder={fallbackMasked ? "Paste a new key to replace it" : "Paste OpenRouter API key"} autoComplete="off" spellCheck={false} />
+          <button type="submit" className="btn btn-secondary" disabled={savingFallback}>{savingFallback ? <Loader2 size={15} className="animate-spin" aria-hidden /> : <KeyRound size={15} aria-hidden />}Save fallback key</button>
+        </form>
+        {fallbackState.error && <p role="alert" className="mt-1.5 text-[13px] text-danger">{fallbackState.error}</p>}
+        {fallbackState.ok && <p role="status" className="mt-1.5 text-[13px] text-forest">OpenRouter fallback key saved. Gemini remains your primary provider.</p>}
+      </div>
 
       <div className="mt-5 border-t border-line pt-5">
         <h3 className="text-sm font-semibold text-ink">OpenRouter image analysis (Nemotron Vision)</h3>
