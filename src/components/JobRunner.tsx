@@ -55,7 +55,8 @@ export function JobRunner({ jobId, items, hasClient, clientName, imported, statu
         setProcessed((n) => n + 1);
       }
     };
-    Promise.all([worker(), worker()]).then(async () => {
+    // Free-tier AI endpoints are rate-limited; process one product at a time.
+    worker().then(async () => {
       if (cancelled || pauseRequested.current) {
         started.current = false;
         await pauseJobAction(jobId);
