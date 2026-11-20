@@ -194,8 +194,11 @@ export async function cutout(file: Blob, strength: number): Promise<Cutout> {
   // Use a substantially firmer alpha cutoff: soft cast-shadow pixels often
   // survive the model as mid-opacity matte, so a tiny threshold change is not
   // enough. The transition remains antialiased for a clean product contour.
-  const low = 88 + level * 0.65;
-  const high = 232 - level * 0.08;
+  // Raise the matte floor enough to reject the faint, connected cast-shadow
+  // fringe that commonly survives around product corners. Keep a short
+  // antialiased transition so opaque product edges stay clean rather than jagged.
+  const low = 145 + level * 0.55;
+  const high = 238 - level * 0.04;
   for (let i = 0; i < d.length; i += 4) {
     const alpha = d[i + 3];
     if (alpha <= low) {
