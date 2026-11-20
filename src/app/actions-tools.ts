@@ -80,6 +80,24 @@ export async function saveOpenRouterVisionKeyAction(fd: FormData): Promise<void>
   refresh();
 }
 
+export async function saveCloudflareFluxKeyAction(fd: FormData): Promise<{ ok: boolean; error?: string }> {
+  await requireUser();
+  await ensureDb();
+  const accountId = String(fd.get("cloudflareAccountId") ?? "").trim();
+  const token = String(fd.get("cloudflareFluxToken") ?? "").trim();
+  const existing = await db.select().from(settings).where(inArray(settings.key, ["cloudflare_account_id", "cloudflare_flux_token"]));
+  const oldAccount = existing.find((row) => row.key === "cloudflare_account_id")?.value ?? "";
+  const oldToken = existing.find((row) => row.key === "cloudflare_flux_token")?.value ?? "";
+  const nextAccount = accountId || oldAccount;
+  const nextToken = token || oldToken;
+  if (!/^[a-f0-9]{32}$/i.test(nextAccount)) return { ok: false, error: "Enter a valid 32-character Cloudflare Account ID." };
+  if (nextToken.length < 20 || nextToken.length > 500 || /\\s/.test(nextToken)) return { ok: false, error: "Enter a valid Cloudflare API token." };
+  await setSetting("cloudflare_account_id", nextAccount);
+  if (token) await setSetting("cloudflare_flux_token", token);
+  refresh();
+  return { ok: true };
+}
+
 export async function savePixelAiKeyAction(fd: FormData): Promise<void> {
   await requireUser();
   await ensureDb();
