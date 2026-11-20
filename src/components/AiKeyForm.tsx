@@ -17,7 +17,7 @@ export function AiKeyForm({ providers, current, visionMasked, pixelAiMasked }: {
   const fromEnv = current?.source === "env";
   const selected = providers.find((p) => p.id === provider) ?? providers[0];
   const providerHelp = selected.id === "gemini"
-    ? "Uses Google Gemini 2.5 Flash-Lite on the free tier for listing text. FLOW does not switch to paid Gemini models."
+    ? "Uses Google Gemini 3.5 Flash-Lite for listing text. FLOW does not switch to paid Gemini models."
     : "Uses OpenRouter free models only. Paid models are rejected and never used as fallbacks.";
 
   useEffect(() => {
