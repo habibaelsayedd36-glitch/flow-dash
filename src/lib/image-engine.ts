@@ -70,6 +70,77 @@ function loadModel(): Promise<Imgly> {
 
 const FULL = 3000; // compositing resolution cap (longest side)
 
+/**
+ * Restore small mask gaps enclosed by the product silhouette.
+ * These gaps are commonly caused when a matting model mistakes printed
+ * lettering, fine label marks or tiny dark details for background.
+ * RGB always remains the user's original pixels; only alpha is repaired.
+ */
+function restoreEnclosedDetails(image: ImageData, width: number, height: number): void {
+  const pixels = width * height;
+  const alphaThreshold = 20;
+  const visited = new Uint8Array(pixels);
+  const queue = new Int32Array(pixels);
+  const alphaAt = (index: number) => image.data[index * 4 + 3];
+  let head = 0;
+  let tail = 0;
+
+  const seed = (index: number) => {
+    if (!visited[index] && alphaAt(index) <= alphaThreshold) {
+      visited[index] = 1;
+      queue[tail++] = index;
+    }
+  };
+
+  // Mark transparent pixels connected to the image border as true background.
+  for (let x = 0; x < width; x++) {
+    seed(x);
+    seed((height - 1) * width + x);
+  }
+  for (let y = 0; y < height; y++) {
+    seed(y * width);
+    seed(y * width + width - 1);
+  }
+  while (head < tail) {
+    const index = queue[head++];
+    const x = index % width;
+    if (x > 0) seed(index - 1);
+    if (x + 1 < width) seed(index + 1);
+    if (index >= width) seed(index - width);
+    if (index + width < pixels) seed(index + width);
+  }
+
+  // Fill only small enclosed gaps; large transparent openings (e.g. handles)
+  // remain transparent. A cap avoids turning large internal openings solid.
+  const maxGapPixels = Math.max(64, Math.floor(pixels * 0.005));
+  for (let start = 0; start < pixels; start++) {
+    if (visited[start] || alphaAt(start) > alphaThreshold) continue;
+    head = 0;
+    tail = 0;
+    visited[start] = 1;
+    queue[tail++] = start;
+    while (head < tail) {
+      const index = queue[head++];
+      const x = index % width;
+      const neighbors = [
+        x > 0 ? index - 1 : -1,
+        x + 1 < width ? index + 1 : -1,
+        index >= width ? index - width : -1,
+        index + width < pixels ? index + width : -1,
+      ];
+      for (const next of neighbors) {
+        if (next >= 0 && !visited[next] && alphaAt(next) <= alphaThreshold) {
+          visited[next] = 1;
+          if (tail < queue.length) queue[tail++] = next;
+        }
+      }
+    }
+    if (tail <= maxGapPixels) {
+      for (let i = 0; i < tail; i++) image.data[queue[i] * 4 + 3] = 255;
+    }
+  }
+}
+
 function makeCanvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
   const canvas = document.createElement("canvas");
   canvas.width = Math.max(1, Math.round(w));
@@ -118,6 +189,8 @@ export async function cutout(file: Blob, strength: number): Promise<Cutout> {
   // Aggressive alpha clipping creates jagged edges and removes fine details,
   // translucent packaging and the product's natural contact shadow.
   const img = ctx.getImageData(0, 0, w, h);
+  restoreEnclosedDetails(img, w, h);
+  ctx.putImageData(img, 0, 0);
   const d = img.data;
   let minX = w;
   let minY = h;
