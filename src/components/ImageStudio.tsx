@@ -183,66 +183,74 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
       }
 
       setMessage("Waiting for the free ZeroGPU queue and regenerating your product photo. This may take a minute or longer; keep this tab open…");
-      const callResponse = await fetch(`${space}/gradio_api/call/generate_images`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          data: [
-            "i2i",
-            "",
-            productPrompt,
-            {
-              path: uploadedPath,
-              orig_name: "product-reference.png",
-              size: reference.size,
-              mime_type: "image/png",
-              meta: { _type: "gradio.FileData" },
-            },
-            0.95,
-            4,
-            4.0,
-            Math.floor(Math.random() * 2_000_000_000),
-          ],
-        }),
-        cache: "no-store",
-      });
-      const callPayload = await callResponse.json().catch(() => null) as { event_id?: string; error?: string } | null;
-      if (!callResponse.ok || !callPayload?.event_id) {
-        throw new Error(callPayload?.error || `Hugging Face could not start the generation (HTTP ${callResponse.status}).`);
-      }
-
-      const resultResponse = await fetch(
-        `${space}/gradio_api/call/generate_images/${encodeURIComponent(callPayload.event_id)}`,
-        { cache: "no-store" },
-      );
-      if (!resultResponse.ok) {
-        throw new Error("The free Hugging Face GPU queue is busy or unavailable. Please try again shortly.");
-      }
-      const stream = await resultResponse.text();
-      const events = stream.split(/\n(?=event:)/);
-      const completed = events.find((event) => /^event: complete\s*$/m.test(event));
-      if (!completed) {
-        const errorEvent = events.find((event) => /^event:\s*error\s*$/m.test(event));
-        const dataLine = errorEvent?.split("\n").find((line) => line.startsWith("data:"));
-        const rawDetail = dataLine?.slice(5).trim() ?? "";
-        let detail = "";
-        if (rawDetail && rawDetail !== "null" && rawDetail !== "undefined") {
-          try {
-            const parsed: unknown = JSON.parse(rawDetail);
-            if (typeof parsed === "string") detail = parsed;
-            else if (parsed && typeof parsed === "object") {
-              const info = parsed as Record<string, unknown>;
-              detail = String(info.message || info.error || info.detail || "");
-            }
-          } catch {
-            detail = rawDetail;
-          }
+      // Gradio keeps gr.State on the server per session. The mode selector is
+      // a State output, so it must be set first in the same session. State is
+      // intentionally omitted from generate_images API data.
+      const sessionHash = crypto.randomUUID();
+      const runSpaceEndpoint = async (endpoint: string, data: unknown[]) => {
+        const response = await fetch(`${space}/gradio_api/call/${endpoint}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ data, session_hash: sessionHash }),
+          cache: "no-store",
+        });
+        const payload = await response.json().catch(() => null) as { event_id?: string; error?: string } | null;
+        if (!response.ok || !payload?.event_id) {
+          throw new Error(payload?.error || `Hugging Face could not start ${endpoint} (HTTP ${response.status}).`);
         }
-        throw new Error(detail || "Hugging Face returned an empty error response. The free Space may be restarting or its GPU queue may be unavailable. Please wait a minute and retry.");
-      }
-      const dataLine = completed.split("\n").find((line) => line.startsWith("data:"));
-      if (!dataLine) throw new Error("The image service returned an empty result.");
-      const resultPayload = JSON.parse(dataLine.slice(5).trim()) as unknown;
+        const result = await fetch(
+          `${space}/gradio_api/call/${endpoint}/${encodeURIComponent(payload.event_id)}`,
+          { cache: "no-store" },
+        );
+        if (!result.ok) {
+          throw new Error(`Hugging Face could not read the ${endpoint} result (HTTP ${result.status}).`);
+        }
+        const stream = await result.text();
+        const events = stream.split(/\\r?\\n(?=event:)/);
+        const completed = events.find((event) => /^event:\\s*complete\\s*$/m.test(event));
+        if (!completed) {
+          const errorEvent = events.find((event) => /^event:\\s*error\\s*$/m.test(event));
+          const dataLine = errorEvent?.split(/\\r?\\n/).find((line) => line.startsWith("data:"));
+          const rawDetail = dataLine?.slice(5).trim() ?? "";
+          let detail = "";
+          if (rawDetail && rawDetail !== "null" && rawDetail !== "undefined") {
+            try {
+              const parsed: unknown = JSON.parse(rawDetail);
+              if (typeof parsed === "string") detail = parsed;
+              else if (parsed && typeof parsed === "object") {
+                const info = parsed as Record<string, unknown>;
+                detail = String(info.message || info.error || info.detail || "");
+              }
+            } catch {
+              detail = rawDetail;
+            }
+          }
+          throw new Error(detail || `Hugging Face returned no details for ${endpoint}. Raw response: ${stream.slice(0, 700)}`);
+        }
+        const dataLine = completed.split(/\\r?\\n/).find((line) => line.startsWith("data:"));
+        if (!dataLine) throw new Error(`Hugging Face returned an empty ${endpoint} result.`);
+        return JSON.parse(dataLine.slice(5).trim()) as unknown;
+      };
+
+      // This mirrors selecting the Image to Image tab in the Space UI.
+      await runSpaceEndpoint("on_select_i2i", []);
+      // Gradio's public API omits the gr.State argument; pass only the seven
+      // actual input components in the order declared by app.py.
+      const resultPayload = await runSpaceEndpoint("generate_images", [
+        "",
+        productPrompt,
+        {
+          path: uploadedPath,
+          orig_name: "product-reference.png",
+          size: reference.size,
+          mime_type: "image/png",
+          meta: { _type: "gradio.FileData" },
+        },
+        0.95,
+        4,
+        4.0,
+        Math.floor(Math.random() * 2_000_000_000),
+      ]);
       const imageUrl = findImageUrl(resultPayload);
       if (!imageUrl) throw new Error("FLUX finished but did not return a usable image. Please retry.");
 
