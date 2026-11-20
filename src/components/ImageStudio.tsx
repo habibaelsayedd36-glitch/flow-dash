@@ -116,8 +116,40 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
     if (fluxBusy.includes(shot.id)) return;
     setFluxBusy((list) => [...list, shot.id]);
     setMessage("");
+    const space = "https://xurxowsky-flux2-klein-4b-playground.hf.space";
+    const productPrompt = [
+      "Create a completely new, photorealistic premium ecommerce studio photograph by re-rendering the uploaded product reference. This must be a genuine image-to-image regeneration, not simple background removal or a filter.",
+      "The uploaded photograph is the single source of truth. Preserve the exact same real product identity and design: silhouette, geometry, proportions, dimensions, packaging shape, cap, pump, closure, material, surface finish, colors, logo, brand mark, label placement, label layout, typography, icons and every visible printed word.",
+      "Do not redesign, recolor, simplify, beautify by changing the product, add or remove parts, invent accessories, duplicate the product, translate text, or make up label wording. Keep the printed label faithful to the reference; never replace uncertain small text with invented writing.",
+      "Create a perfectly seamless pure white #FFFFFF background edge-to-edge. Show one product only, upright, front-facing, centered, fully visible with safe margins, occupying about 85 percent of a square frame.",
+      "Rebuild the photograph with polished premium commercial studio lighting, accurate white balance and product colors, crisp realistic edges, clean fine detail, natural material reflections, controlled highlights, and a subtle realistic contact shadow directly beneath the product.",
+      "The result should look like a newly photographed high-end marketplace main image. No props, scenery, gradients, colored backgrounds, extra text, watermark, border, or frame."
+    ].join(" ");
+    const findImageUrl = (value: unknown): string | null => {
+      if (!value || typeof value !== "object") return null;
+      const item = value as Record<string, unknown>;
+      if (typeof item.url === "string" && item.url) {
+        return item.url.startsWith("/") ? `${space}${item.url}` : item.url;
+      }
+      if (typeof item.path === "string" && item.path) {
+        return `${space}/gradio_api/file=${encodeURIComponent(item.path)}`;
+      }
+      for (const child of Object.values(item)) {
+        if (Array.isArray(child)) {
+          for (const entry of child) {
+            const found = findImageUrl(entry);
+            if (found) return found;
+          }
+        } else {
+          const found = findImageUrl(child);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
     try {
-      // Hugging Face FLUX.2 Klein accepts product references up to 1024px on the longest side.
+      // Submit directly from the browser so Vercel's free-function timeout
+      // cannot terminate a valid Hugging Face ZeroGPU generation.
       const bitmap = await createImageBitmap(shot.file);
       const scale = Math.min(1024 / bitmap.width, 1024 / bitmap.height, 1);
       const canvas = document.createElement("canvas");
@@ -130,21 +162,90 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
       const reference = await new Promise<Blob>((resolve, reject) =>
         canvas.toBlob((value) => value ? resolve(value) : reject(new Error("Could not encode the FLUX reference image.")), "image/png"),
       );
-      const form = new FormData();
-      form.append("image", reference, "product-reference.png");
-      const response = await fetch("/api/ai-ad/flux", { method: "POST", body: form });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({})) as { error?: string };
-        throw new Error(payload.error || "FLUX.2 Klein image editing failed.");
+
+      setMessage("Uploading the reference photo to the free Hugging Face Space…");
+      const uploadForm = new FormData();
+      uploadForm.append("files", reference, "product-reference.png");
+      const uploadResponse = await fetch(`${space}/gradio_api/upload`, {
+        method: "POST",
+        body: uploadForm,
+        cache: "no-store",
+      });
+      if (!uploadResponse.ok) {
+        throw new Error(uploadResponse.status === 503
+          ? "Hugging Face is waking up the free GPU. Wait a little and try again."
+          : `Could not upload the reference photo to Hugging Face (HTTP ${uploadResponse.status}).`);
       }
-      const blob = await response.blob();
+      const uploaded = await uploadResponse.json() as unknown;
+      const uploadedPath = Array.isArray(uploaded) ? uploaded[0] : uploaded;
+      if (typeof uploadedPath !== "string" || !uploadedPath) {
+        throw new Error("Hugging Face did not accept the reference image.");
+      }
+
+      setMessage("Waiting for the free ZeroGPU queue and regenerating your product photo. This may take a minute or longer; keep this tab open…");
+      const callResponse = await fetch(`${space}/gradio_api/call/generate_images`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          data: [
+            "i2i",
+            "",
+            productPrompt,
+            {
+              path: uploadedPath,
+              orig_name: "product-reference.png",
+              size: reference.size,
+              mime_type: "image/png",
+              meta: { _type: "gradio.FileData" },
+            },
+            0.95,
+            4,
+            4.0,
+            Math.floor(Math.random() * 2_000_000_000),
+          ],
+        }),
+        cache: "no-store",
+      });
+      const callPayload = await callResponse.json().catch(() => null) as { event_id?: string; error?: string } | null;
+      if (!callResponse.ok || !callPayload?.event_id) {
+        throw new Error(callPayload?.error || `Hugging Face could not start the generation (HTTP ${callResponse.status}).`);
+      }
+
+      const resultResponse = await fetch(
+        `${space}/gradio_api/call/generate_images/${encodeURIComponent(callPayload.event_id)}`,
+        { cache: "no-store" },
+      );
+      if (!resultResponse.ok) {
+        throw new Error("The free Hugging Face GPU queue is busy or unavailable. Please try again shortly.");
+      }
+      const stream = await resultResponse.text();
+      const events = stream.split(/\\n(?=event:)/);
+      const completed = events.find((event) => /^event: complete\\s*$/m.test(event));
+      if (!completed) {
+        const errorEvent = events.find((event) => /^event: error\\s*$/m.test(event));
+        const detail = errorEvent?.split("\\n").find((line) => line.startsWith("data:"))?.slice(5).trim();
+        throw new Error(detail || "The free Hugging Face Space did not complete the image job. It may be busy; please retry.");
+      }
+      const dataLine = completed.split("\\n").find((line) => line.startsWith("data:"));
+      if (!dataLine) throw new Error("The image service returned an empty result.");
+      const resultPayload = JSON.parse(dataLine.slice(5).trim()) as unknown;
+      const imageUrl = findImageUrl(resultPayload);
+      if (!imageUrl) throw new Error("FLUX finished but did not return a usable image. Please retry.");
+
+      const generated = await fetch(imageUrl, { cache: "no-store" });
+      if (!generated.ok) throw new Error("The generated image could not be downloaded from Hugging Face.");
+      const blob = await generated.blob();
       if (!blob.size || !blob.type.startsWith("image/")) throw new Error("FLUX returned an invalid image.");
       const preview = URL.createObjectURL(blob);
       if (shot.preview) URL.revokeObjectURL(shot.preview);
       patch(shot.id, { preview, aiBlob: blob });
       setMessage("Free Hugging Face FLUX.2 Klein generated a new studio-style image. Check every label against the original before downloading.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "FLUX image editing failed.");
+      setMessage(error instanceof Error
+        ? error.message.includes("Failed to fetch")
+          ? "Could not connect to the free Hugging Face Space. Check that the Space is running, then try again."
+          : error.message
+        : "FLUX image editing failed.");
     } finally {
       setFluxBusy((list) => list.filter((id) => id !== shot.id));
     }
