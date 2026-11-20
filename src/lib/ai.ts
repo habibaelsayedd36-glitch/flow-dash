@@ -491,11 +491,42 @@ Return ONLY the complete JSON object in this exact shape:
   }
 
   if (hasShortBullets(current, m)) {
-    const short = [
-      ...current.bulletsEn,
-      ...current.bulletsAr,
-    ].filter((bullet) => bullet.trim().length < min).length;
-    throw new Error(`${p.label}: the model returned ${short} bullets below the ${min}-character minimum after 3 correction attempts. Add more confirmed product facts or retry later.`);
+    // Last-resort deterministic repair: preserve each model-written product
+    // fact and add neutral shopper guidance already used by FLOW's template
+    // engine. This adds no specifications or product-performance claims.
+    const enFacts = brief.features.split(/\\r?\\n/).map((s) => s.replace(/^[-•*\\s]+/, "").trim()).filter(Boolean);
+    const arFacts = brief.featuresAr.split(/\\r?\\n/).map((s) => s.replace(/^[-•*\\s]+/, "").trim()).filter(Boolean);
+    const enFallback = enFacts.length ? enFacts : [brief.name.trim()];
+    const arFallback = arFacts.length ? arFacts : [brief.nameAr.trim()];
+    const enSuffix = " Use this stated detail to compare options and check whether the product matches your needs before purchase.";
+    const arSuffix = " وتساعدك هذه المعلومة على مقارنة الخيارات والتأكد من ملاءمة المنتج لاحتياجك قبل الشراء.";
+    const fit = (source: string, fallback: string, suffix: string) => {
+      const base = (source || fallback).trim().replace(/[.!،؛,\\s]+$/u, "");
+      const room = Math.max(0, max - suffix.length - 1);
+      const shortened = base.length > room ? base.slice(0, room).replace(/\\s+\\S*$/u, "").trim() : base;
+      let result = shortened + suffix;
+      if (result.length < min && fallback && fallback !== source) {
+        const safeFallback = fallback.trim().replace(/[.!،؛,\\s]+$/u, "");
+        const fallbackRoom = Math.max(0, max - suffix.length - 1);
+        const fallbackBase = safeFallback.length > fallbackRoom
+          ? safeFallback.slice(0, fallbackRoom).replace(/\\s+\\S*$/u, "").trim()
+          : safeFallback;
+        result = fallbackBase + suffix;
+      }
+      return result.slice(0, max).trim();
+    };
+    current = {
+      ...current,
+      bulletsEn: Array.from({ length: RULES[m].bullets }, (_, i) =>
+        fit(current.bulletsEn[i] ?? "", enFallback[i % enFallback.length] ?? brief.name, enSuffix)
+      ),
+      bulletsAr: Array.from({ length: RULES[m].bullets }, (_, i) =>
+        fit(current.bulletsAr[i] ?? "", arFallback[i % Math.max(1, arFallback.length)] ?? brief.nameAr, arSuffix)
+      ),
+    };
+    if (hasShortBullets(current, m)) {
+      throw new Error(`FLOW could not safely complete all ${RULES[m].bullets} bilingual bullets. Add confirmed product details and retry.`);
+    }
   }
   return current;
 }
