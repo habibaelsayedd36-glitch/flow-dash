@@ -751,6 +751,7 @@ export async function generateJobItem(
   tone: string,
   known: Partial<Record<SpecKey, string>>,
   missing: SpecKey[],
+  correctionNotes = "",
 ): Promise<{ content: ListingContent; specs: Partial<Record<SpecKey, string>> }> {
   const knownText = Object.entries(known)
     .map(([k, v]) => `- ${k}: ${v}`)
@@ -780,7 +781,7 @@ Return exactly this JSON shape:
   if (!researchedBrief.features.trim() && !researchedBrief.featuresAr.trim()) {
     throw new Error("Add a product name or at least one confirmed product detail before generating this row.");
   }
-  const raw = await callListingJson(p, SYSTEM, userPrompt(researchedBrief, m, tone, "", tail));
+  const raw = await callListingJson(p, SYSTEM, userPrompt(researchedBrief, m, tone, correctionNotes, tail));
   const initialContent = toListing(raw, m);
   const content = await repairShortBullets(p, researchedBrief, m, initialContent, tail);
   const rawSpecs = (raw.specs && typeof raw.specs === "object" ? raw.specs : {}) as Record<string, unknown>;
