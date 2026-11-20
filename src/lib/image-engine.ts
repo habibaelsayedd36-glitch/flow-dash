@@ -191,14 +191,12 @@ export async function cutout(file: Blob, strength: number): Promise<Cutout> {
   restoreEnclosedDetails(img, w, h);
   const d = img.data;
   const level = Math.max(0, Math.min(100, strength));
-  // Use a substantially firmer alpha cutoff: soft cast-shadow pixels often
-  // survive the model as mid-opacity matte, so a tiny threshold change is not
-  // enough. The transition remains antialiased for a clean product contour.
-  // Raise the matte floor enough to reject the faint, connected cast-shadow
-  // fringe that commonly survives around product corners. Keep a short
-  // antialiased transition so opaque product edges stay clean rather than jagged.
-  const low = 145 + level * 0.55;
-  const high = 238 - level * 0.04;
+  // Use a conservative matte threshold. Aggressive thresholds remove real
+  // product pixels at corners, transparent parts and fine edges. Background
+  // cleanup must never trade away the product to chase every soft shadow.
+  // The short smooth transition trims only the weakest fringe.
+  const low = 42 + level * 0.28;
+  const high = 188 + level * 0.12;
   for (let i = 0; i < d.length; i += 4) {
     const alpha = d[i + 3];
     if (alpha <= low) {
@@ -210,19 +208,8 @@ export async function cutout(file: Blob, strength: number): Promise<Cutout> {
       d[i + 3] = Math.round((t * t * (3 - 2 * t)) * 255);
     }
 
-    // Very restrained product-only color lift: slightly richer saturation
-    // and contrast, without changing geometry, text or logo shapes.
-    if (d[i + 3] > 32) {
-      const r = d[i];
-      const g = d[i + 1];
-      const b = d[i + 2];
-      const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-      const saturate = (channel: number) => luma + (channel - luma) * 1.14;
-      const contrast = (channel: number) => Math.max(0, Math.min(255, (channel - 128) * 1.13 + 128));
-      d[i] = Math.round(contrast(saturate(r)));
-      d[i + 1] = Math.round(contrast(saturate(g)));
-      d[i + 2] = Math.round(contrast(saturate(b)));
-    }
+    // Preserve the source RGB exactly. Do not recolor product surfaces,
+    // printed text, logos or labels during background removal.
   }
   ctx.putImageData(img, 0, 0);
   let minX = w;
