@@ -319,36 +319,76 @@ async function post(url: string, headers: Record<string, string>, body: unknown,
 /** One request to whichever provider is connected. Returns the raw text of the reply. */
 async function callModel(p: AiProvider, system: string, user: string, json: boolean): Promise<string> {
   if (p.id === "gemini") {
-    // Google recommends the Interactions API for current Gemini models.
-    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-goog-api-key": p.key,
-      },
-      body: JSON.stringify({
-        model: PROVIDERS.gemini.defaultModel,
-        input: `${system}\n\nUSER REQUEST:\n${user}`,
-        store: false,
-        ...(json ? { response_format: { type: "text", mime_type: "application/json" } } : {}),
-      }),
-      signal: AbortSignal.timeout(60_000),
-      cache: "no-store",
-    });
-    const data = await response.json().catch(() => null) as {
-      steps?: { type?: string; content?: { type?: string; text?: string }[] }[];
-      output_text?: string;
-      error?: { message?: string };
-    } | null;
-    if (!response.ok) throw new Error(`Google Gemini (${response.status}): ${data?.error?.message || response.statusText || "request failed"}`);
-    const result = data?.output_text?.trim()
-      || data?.steps?.filter((step) => step.type === "model_output")
-        .flatMap((step) => step.content ?? [])
-        .filter((part) => part.type === "text")
-        .map((part) => part.text ?? "")
-        .join("").trim();
-    if (!result) throw new Error("Google Gemini returned an empty response.");
-    return result;
+    // Retry temporary overloads, then try a second free Gemini model.
+    // Never switch to a paid model or silently change providers.
+    const models = Array.from(new Set([p.model || PROVIDERS.gemini.defaultModel, "gemini-3.8-flash"]));
+    let lastError: Error | null = null;
+
+    for (const model of models) {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        let response: Response;
+        try {
+          response = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-goog-api-key": p.key,
+            },
+            body: JSON.stringify({
+              model,
+              input: `${system}\\n\\nUSER REQUEST:\\n${user}`,
+              store: false,
+              ...(json ? { response_format: { type: "text", mime_type: "application/json" } } : {}),
+            }),
+            signal: AbortSignal.timeout(60_000),
+            cache: "no-store",
+          });
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error(String(error));
+          if (attempt < 2) {
+            await new Promise((resolve) => setTimeout(resolve, 1_000 * 2 ** attempt));
+            continue;
+          }
+          break;
+        }
+
+        const data = await response.json().catch(() => null) as {
+          steps?: { type?: string; content?: { type?: string; text?: string }[] }[];
+          output_text?: string;
+          error?: { message?: string };
+        } | null;
+
+        if (!response.ok) {
+          const message = `Google Gemini (${response.status}): ${data?.error?.message || response.statusText || "request failed"}`;
+          lastError = new Error(message);
+          const retryable = [429, 500, 502, 503, 504].includes(response.status);
+          if (retryable && attempt < 2) {
+            const retryAfter = Number(response.headers.get("retry-after") || "");
+            const delay = Number.isFinite(retryAfter) && retryAfter > 0
+              ? Math.min(15_000, retryAfter * 1000)
+              : Math.min(8_000, 1_000 * 2 ** attempt);
+            await new Promise((resolve) => setTimeout(resolve, delay));
+            continue;
+          }
+          // Try the alternate free model for overload, rate limits, or retired model IDs.
+          if (retryable || response.status === 404) break;
+          throw lastError;
+        }
+
+        const result = data?.output_text?.trim()
+          || data?.steps?.filter((step) => step.type === "model_output")
+            .flatMap((step) => step.content ?? [])
+            .filter((part) => part.type === "text")
+            .map((part) => part.text ?? "")
+            .join("").trim();
+        if (!result) throw new Error(`Google Gemini (${model}) returned an empty response.`);
+        return result;
+      }
+    }
+
+    throw new Error(
+      `Google Gemini models are temporarily unavailable after automatic retries. FLOW tried ${models.join(" and ")}; no paid model was used. Please retry in a few minutes. ${lastError?.message || ""}`,
+    );
   }
   const requestChat = (model: string) => post(
     "https://openrouter.ai/api/v1/chat/completions",
