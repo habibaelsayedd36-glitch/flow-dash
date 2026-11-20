@@ -1,97 +1,154 @@
 import { requireApiUser } from "@/lib/auth/server";
-import { getCloudflareFluxConfig } from "@/lib/ai";
-import { db } from "@/db";
-import { settings } from "@/db/schema";
-import { eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
-export const maxDuration = 90;
+export const maxDuration = 120;
 
-const MODEL = "@cf/black-forest-labs/flux-2-klein-4b";
+const SPACE = "https://xurxowsky-flux2-klein-4b-playground.hf.space";
+const MAX_UPLOAD = 5_000_000;
+
+const PRODUCT_PROMPT = [
+  "Create a completely new, photorealistic premium ecommerce studio photograph by re-rendering the uploaded product reference. This must be a genuine image-to-image regeneration, not simple background removal or a filter.",
+  "The uploaded photograph is the single source of truth. Preserve the exact same real product identity and design: silhouette, geometry, proportions, dimensions, packaging shape, cap, pump, closure, material, surface finish, colors, logo, brand mark, label placement, label layout, typography, icons and every visible printed word.",
+  "Do not redesign, recolor, simplify, beautify by changing the product, add or remove parts, invent accessories, duplicate the product, translate text, or make up label wording. Keep the printed label faithful to the reference; never replace uncertain small text with invented writing.",
+  "Create a perfectly seamless pure white #FFFFFF background edge-to-edge. Show one product only, upright, front-facing, centered, fully visible with safe margins, occupying about 85 percent of a square frame.",
+  "Rebuild the photograph with polished premium commercial studio lighting, accurate white balance and product colors, crisp realistic edges, clean fine detail, natural material reflections, controlled highlights, and a subtle realistic contact shadow directly beneath the product.",
+  "The result should look like a newly photographed high-end marketplace main image. No props, scenery, gradients, colored backgrounds, extra text, watermark, border, or frame."
+].join(" ");
+
+function getImageUrl(value: unknown): string | null {
+  if (!value || typeof value !== "object") return null;
+  const item = value as Record<string, unknown>;
+  if (typeof item.url === "string" && item.url) return item.url;
+  if (typeof item.path === "string" && item.path) {
+    return `${SPACE}/gradio_api/file=${encodeURIComponent(item.path)}`;
+  }
+  for (const child of Object.values(item)) {
+    if (Array.isArray(child)) {
+      for (const entry of child) {
+        const found = getImageUrl(entry);
+        if (found) return found;
+      }
+    } else {
+      const found = getImageUrl(child);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+function parseCompletedEvent(stream: string): unknown {
+  const events = stream.split(/\n(?=event:)/);
+  const completed = events.find((event) => /^event: complete\s*$/m.test(event));
+  if (!completed) {
+    const errorEvent = events.find((event) => /^event: error\s*$/m.test(event));
+    const detail = errorEvent?.split("\n").find((line) => line.startsWith("data:"))?.slice(5).trim();
+    throw new Error(detail || "The free Hugging Face Space did not complete the image job. It may be busy; please retry.");
+  }
+  const dataLine = completed.split("\n").find((line) => line.startsWith("data:"));
+  if (!dataLine) throw new Error("The image service returned an empty result.");
+  return JSON.parse(dataLine.slice(5).trim());
+}
 
 export async function POST(request: NextRequest) {
   const unauthorized = await requireApiUser();
   if (unauthorized) return unauthorized;
 
   try {
-    const { accountId, token } = await getCloudflareFluxConfig();
-    if (!/^[a-f0-9]{32}$/i.test(accountId) || !token) {
-      return NextResponse.json({ error: "Connect Cloudflare Workers AI in Settings before using FLUX.2 Klein 4B." }, { status: 400 });
-    }
-
     const incoming = await request.formData();
     const image = incoming.get("image");
     if (!(image instanceof File) || !["image/png", "image/jpeg", "image/webp"].includes(image.type)) {
       return NextResponse.json({ error: "Upload a PNG, JPEG, or WebP product photo." }, { status: 400 });
     }
-    if (image.size > 3_000_000) {
-      return NextResponse.json({ error: "The FLUX reference image must be smaller than 3 MB." }, { status: 413 });
+    if (image.size > MAX_UPLOAD) {
+      return NextResponse.json({ error: "Please use a product photo smaller than 5 MB." }, { status: 413 });
     }
 
-    const prompt = [
-      "Re-generate the entire photograph with AI as a brand-new, photorealistic premium ecommerce MAIN product image. Do not merely erase the background, apply a filter, or make a minor retouch.",
-      "Use the uploaded photo as the visual reference for the exact product identity, then render a fresh professional studio photograph with a newly synthesized clean composition, lighting, shadows, and white studio environment.",
-      "The physical product must remain recognizably the same item: preserve its silhouette, geometry, proportions, cap, pump, closure, packaging shape, material, finish, and original colors. Do not redesign the product, add accessories, or create extra products.",
-      "LABEL FIDELITY IS A PRIORITY: reproduce the visible label layout, brand mark, typography, icons, and printed wording as closely as possible to the reference. Never invent replacement words or translate label text. If tiny text cannot be reproduced reliably, keep the label visually faithful rather than fabricating new writing.",
-      "Create a perfectly pure seamless white #FFFFFF ecommerce background, square composition, front-facing catalog view, centered upright product, fully visible with safe margins, occupying about 85 percent of the frame.",
-      "Rebuild the scene with premium commercial studio lighting, accurate white balance, crisp realistic edges, natural material reflections, polished high-end product photography, and a subtle realistic contact shadow directly beneath the product.",
-      "The result must look like a newly generated professional product photograph, not the original photo with only its background removed. No props, scenery, gradients, colored backdrop, extra text, watermark, or frame."
-    ].join(" ");
-
-    // FLOW caps its own use at 80 fixed 1024px generations per UTC day.
-    // This leaves a buffer under Cloudflare's 10,000-Neuron daily free allocation.
-    const dayKey = new Date().toISOString().slice(0, 10);
-    const usageKey = "cloudflare_flux_daily_" + dayKey;
-    const [usageRow] = await db.select().from(settings).where(eq(settings.key, usageKey));
-    const used = Number(usageRow?.value ?? "0");
-    if (used >= 80) {
-      return NextResponse.json({ error: "FLOW's free FLUX daily limit (80 images) has been reached. Try again after the daily reset. No paid fallback is enabled." }, { status: 429 });
-    }
-    await db.insert(settings).values({ key: usageKey, value: String(used + 1) })
-      .onConflictDoUpdate({ target: settings.key, set: { value: String(used + 1) } });
-
-    const body = new FormData();
-    body.append("prompt", prompt);
-    body.append("input_image_0", image, "product-reference.png");
-    body.append("width", "1024");
-    body.append("height", "1024");
-    body.append("guidance", "3.5");
-
-    const endpoint = "https://api.cloudflare.com/client/v4/accounts/" + accountId + "/ai/run/" + MODEL;
-    const upstream = await fetch(endpoint, {
+    const uploadForm = new FormData();
+    uploadForm.append("files", image, "product-reference.png");
+    const uploadResponse = await fetch(`${SPACE}/gradio_api/upload`, {
       method: "POST",
-      headers: { Authorization: "Bearer " + token },
-      body,
-      signal: AbortSignal.timeout(80_000),
+      body: uploadForm,
       cache: "no-store",
+      signal: AbortSignal.timeout(25_000),
     });
-
-    const payload = await upstream.json().catch(() => null) as {
-      success?: boolean;
-      result?: { image?: string };
-      errors?: Array<{ message?: string; code?: number }>;
-      messages?: Array<{ message?: string }>;
-    } | null;
-
-    if (!upstream.ok || !payload?.success || !payload.result?.image) {
-      const detail = payload?.errors?.[0]?.message || payload?.messages?.[0]?.message || "Cloudflare FLUX request failed (HTTP " + upstream.status + ").";
-      const status = upstream.status === 429 ? 429 : upstream.status >= 400 && upstream.status < 500 ? upstream.status : 502;
-      return NextResponse.json({ error: detail.slice(0, 500) }, { status });
+    const uploadText = await uploadResponse.text();
+    if (!uploadResponse.ok) {
+      return NextResponse.json({
+        error: uploadResponse.status === 503
+          ? "Hugging Face is waking up the free GPU. Wait a little and try again."
+          : `Could not upload the reference photo to Hugging Face (HTTP ${uploadResponse.status}).`,
+      }, { status: uploadResponse.status === 429 ? 429 : 502 });
     }
 
-    const bytes = Buffer.from(payload.result.image, "base64");
+    let uploaded: unknown;
+    try { uploaded = JSON.parse(uploadText); } catch { uploaded = uploadText; }
+    const uploadedPath = Array.isArray(uploaded) ? uploaded[0] : uploaded;
+    if (typeof uploadedPath !== "string" || !uploadedPath) {
+      return NextResponse.json({ error: "Hugging Face did not accept the reference image." }, { status: 502 });
+    }
+
+    const callResponse = await fetch(`${SPACE}/gradio_api/call/generate_images`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        data: [
+          "i2i",
+          "",
+          PRODUCT_PROMPT,
+          {
+            path: uploadedPath,
+            orig_name: "product-reference.png",
+            size: image.size,
+            mime_type: image.type,
+            meta: { _type: "gradio.FileData" },
+          },
+          0.95,
+          4,
+          4.0,
+          Math.floor(Math.random() * 2_000_000_000),
+        ],
+      }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(25_000),
+    });
+    const callPayload = await callResponse.json().catch(() => null) as { event_id?: string; error?: string } | null;
+    if (!callResponse.ok || !callPayload?.event_id) {
+      const message = callPayload?.error || `Hugging Face could not start the generation (HTTP ${callResponse.status}).`;
+      return NextResponse.json({ error: message }, { status: callResponse.status === 429 ? 429 : 502 });
+    }
+
+    const resultResponse = await fetch(
+      `${SPACE}/gradio_api/call/generate_images/${encodeURIComponent(callPayload.event_id)}`,
+      { cache: "no-store", signal: AbortSignal.timeout(85_000) },
+    );
+    if (!resultResponse.ok) {
+      return NextResponse.json({ error: "The free GPU queue is busy or unavailable. Please try again shortly." }, { status: 503 });
+    }
+    const resultPayload = parseCompletedEvent(await resultResponse.text());
+    const imageUrl = getImageUrl(resultPayload);
+    if (!imageUrl) {
+      return NextResponse.json({ error: "FLUX finished but did not return a usable image. Please retry." }, { status: 502 });
+    }
+
+    const generated = await fetch(imageUrl, { cache: "no-store", signal: AbortSignal.timeout(20_000) });
+    if (!generated.ok) {
+      return NextResponse.json({ error: "The generated image could not be downloaded from Hugging Face." }, { status: 502 });
+    }
+    const bytes = Buffer.from(await generated.arrayBuffer());
     if (!bytes.length || bytes.length > 15_000_000) {
-      return NextResponse.json({ error: "Cloudflare returned an invalid or oversized image." }, { status: 502 });
+      return NextResponse.json({ error: "Hugging Face returned an invalid or oversized image." }, { status: 502 });
     }
 
     return new NextResponse(bytes, {
-      headers: { "Content-Type": "image/png", "Cache-Control": "no-store" },
+      headers: { "Content-Type": generated.headers.get("content-type")?.startsWith("image/") ? generated.headers.get("content-type")! : "image/png", "Cache-Control": "no-store" },
     });
   } catch (error) {
     const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
     return NextResponse.json({
-      error: timedOut ? "FLUX.2 Klein 4B timed out. Please retry with a smaller source photo." : error instanceof Error ? error.message : "Unexpected FLUX image editing error.",
+      error: timedOut
+        ? "The free Hugging Face GPU took too long or is still starting. Try again in a minute; no paid fallback is enabled."
+        : error instanceof Error ? error.message : "Unexpected FLUX image editing error.",
     }, { status: timedOut ? 504 : 500 });
   }
 }
