@@ -208,8 +208,21 @@ export async function cutout(file: Blob, strength: number): Promise<Cutout> {
       d[i + 3] = Math.round((t * t * (3 - 2 * t)) * 255);
     }
 
-    // Preserve the source RGB exactly. Do not recolor product surfaces,
-    // printed text, logos or labels during background removal.
+    // Give product colors a visible but controlled saturation lift.
+    // Keep neutral pixels (white/grey/black text and fine label details) nearly
+    // unchanged so printed information stays readable and recognizable.
+    if (d[i + 3] > 32) {
+      const r = d[i];
+      const g = d[i + 1];
+      const b = d[i + 2];
+      const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      const chroma = Math.max(r, g, b) - Math.min(r, g, b);
+      const boost = chroma < 18 ? 1 : 1.28;
+      const lift = (channel: number) => Math.max(0, Math.min(255, Math.round(luma + (channel - luma) * boost)));
+      d[i] = lift(r);
+      d[i + 1] = lift(g);
+      d[i + 2] = lift(b);
+    }
   }
   ctx.putImageData(img, 0, 0);
   let minX = w;
