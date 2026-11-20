@@ -229,15 +229,16 @@ Features must only restate supplied facts. Keywords may include only the product
 
 export type RegenerateInput = { features: string; featuresAr: string; keywords: string; marketplace: string; tone: string; notes: string };
 export type RegenerateResult =
-  | { ok: false }
+  | { ok: false; error?: string }
   | { ok: true; content: ListingContent; marketplace: string; engine: string; model: string | null; aiError: string | null; ran: number };
 
 export async function regenerateListingAction(listingId: number, input: RegenerateInput): Promise<RegenerateResult> {
-  await requireUser();
-  await ensureDb();
-  const [listing] = await db.select().from(listings).where(eq(listings.id, listingId));
-  if (!listing) return { ok: false };
   try {
+    await requireUser();
+    await ensureDb();
+    const [listing] = await db.select().from(listings).where(eq(listings.id, listingId));
+    if (!listing) return { ok: false, error: "This listing could not be found. Refresh the page and try again." };
+
     const [product] = await db
       .update(products)
       .set({
@@ -247,6 +248,8 @@ export async function regenerateListingAction(listingId: number, input: Regenera
       })
       .where(eq(products.id, listing.productId))
       .returning();
+    if (!product) return { ok: false, error: "The product linked to this listing could not be found." };
+
     const made = await produceListing(product, {
       marketplace: isMarketplace(input.marketplace) ? input.marketplace : listing.marketplace,
       tone: oneOf(TONES, String(input.tone), "clear"),
@@ -255,6 +258,7 @@ export async function regenerateListingAction(listingId: number, input: Regenera
     });
     const results = await emit("listing_generated", { productId: product.id, clientId: product.clientId, listingId, score: made.score });
     const [fresh] = await db.select().from(listings).where(eq(listings.id, listingId));
+    if (!fresh) return { ok: false, error: "The generated listing was not saved. Your previous listing is still available." };
     refresh();
     return {
       ok: true,
@@ -273,8 +277,11 @@ export async function regenerateListingAction(listingId: number, input: Regenera
       aiError: made.aiError,
       ran: fired(results),
     };
-  } catch {
-    return { ok: false };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message.slice(0, 300) : "Listing regeneration failed. Please retry.",
+    };
   }
 }
 
