@@ -503,13 +503,13 @@ Return ONLY the complete JSON object in this exact shape:
     const fit = (source: string, fallback: string, suffix: string) => {
       const base = (source || fallback).trim().replace(/[.!،؛,\s]+$/u, "");
       const room = Math.max(0, max - suffix.length - 1);
-      const shortened = base.length > room ? base.slice(0, room).replace(/\s+\\S*$/u, "").trim() : base;
+      const shortened = base.length > room ? base.slice(0, room).replace(/\s+\S*$/u, "").trim() : base;
       let result = shortened + suffix;
       if (result.length < min && fallback && fallback !== source) {
         const safeFallback = fallback.trim().replace(/[.!،؛,\s]+$/u, "");
         const fallbackRoom = Math.max(0, max - suffix.length - 1);
         const fallbackBase = safeFallback.length > fallbackRoom
-          ? safeFallback.slice(0, fallbackRoom).replace(/\s+\\S*$/u, "").trim()
+          ? safeFallback.slice(0, fallbackRoom).replace(/\s+\S*$/u, "").trim()
           : safeFallback;
         result = fallbackBase + suffix;
       }
@@ -688,7 +688,7 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
           if (/format=rss/i.test(searchUrl)) {
             const items = searchText.match(/<item\b[\s\S]*?<\/item>/gi) ?? [];
             for (const item of items) {
-              const getTag = (tag: string) => item.match(new RegExp("<" + tag + "[^>]*>([\s\\S]*?)</" + tag + ">", "i"))?.[1] ?? "";
+              const getTag = (tag: string) => item.match(new RegExp("<" + tag + "[^>]*>([\s\S]*?)</" + tag + ">", "i"))?.[1] ?? "";
               const rawUrl = getTag("link").replace(/<!\[CDATA\[|\]\]>/g, "").trim();
               const title = getTag("title").replace(/<!\[CDATA\[|\]\]>/g, "").replace(/<[^>]+>/g, " ").trim();
               const snippet = getTag("description").replace(/<!\[CDATA\[|\]\]>/g, "").replace(/<[^>]+>/g, " ").trim();
