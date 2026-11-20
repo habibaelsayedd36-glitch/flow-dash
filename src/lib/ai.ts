@@ -467,7 +467,7 @@ async function repairShortBullets(
   // Some free-tier models ignore the length constraint on the first correction.
   // Give the model multiple targeted chances, explicitly identifying each short
   // bullet and its current character count instead of failing the whole product.
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 1; attempt++) {
     if (!hasShortBullets(current, m)) return current;
 
     const shortItems = [
@@ -625,7 +625,7 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
   // Use Jina Reader as a server-side search-page reader first. It converts
   // Google/Bing result pages into clean text and avoids brittle HTML selectors
   // and search-engine bot challenges from Vercel serverless IPs.
-  const readerSearchUrls = queries.flatMap((query) => [
+  const readerSearchUrls = queries.slice(0, 2).flatMap((query) => [
     "https://r.jina.ai/http://www.google.com/search?q=" + encodeURIComponent(query),
     "https://r.jina.ai/http://www.bing.com/search?q=" + encodeURIComponent(query),
   ]);
@@ -633,7 +633,7 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
     try {
       const response = await fetch(searchUrl, {
         headers: { accept: "text/plain, text/markdown, */*" },
-        signal: AbortSignal.timeout(20_000),
+        signal: AbortSignal.timeout(9_000),
         cache: "no-store",
       });
       if (!response.ok) return null;
@@ -661,8 +661,8 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
 
   // Only fan out to broader queries if the exact-name search did not return
   // enough candidates. Keep the fallback path conservative and bounded.
-  if (results.length < 8) {
-    // Fetch fallback search engines together. Sequential requests added several
+  if (results.length < 3) {
+    // Fetch broader queries only when the exact-name searches return too few candidates. Sequential requests added several
     // full network round-trips to listings for products with uncommon names.
     const fallbackPages = await Promise.all(readerSearchUrls.slice(2).map(readSearchPage));
     for (const page of fallbackPages) if (page) addSearchPage(page);
@@ -670,8 +670,8 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
 
   // Keep direct RSS/HTML providers as secondary fallbacks, but never depend
   // on their markup being identical across search-engine experiments.
-  if (results.length < 8) {
-    for (const query of queries) {
+  if (results.length === 0) {
+    for (const query of queries.slice(0, 1)) {
       const searchUrls = [
         "https://www.bing.com/search?format=rss&q=" + encodeURIComponent(query),
         "https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query),
@@ -680,7 +680,7 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
         try {
           const response = await fetch(searchUrl, {
             headers: { "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36", accept: "application/rss+xml, application/xml, text/html;q=0.9, */*;q=0.8" },
-            signal: AbortSignal.timeout(12_000), cache: "no-store",
+            signal: AbortSignal.timeout(6_000), cache: "no-store",
           });
           if (!response.ok) continue;
           searchWasAvailable = true;
@@ -702,7 +702,7 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
               addResult(anchor[1], anchor[2], "");
             }
           }
-          if (results.length >= 8) break;
+          if (results.length >= 3) break;
         } catch { /* try the next public search provider */ }
       }
       if (results.length >= 8) break;
@@ -723,12 +723,12 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
       .replace(/\n{3,}/g, "\n\n")
       .trim()
   );
-  const pages = await Promise.all(results.slice(0, 12).map(async (result) => {
+  const pages = await Promise.all(results.slice(0, 4).map(async (result) => {
     // Try the clean Reader representation first.
     try {
       const response = await fetch("https://r.jina.ai/" + result.url, {
         headers: { accept: "text/plain, text/markdown, */*" },
-        signal: AbortSignal.timeout(18_000),
+        signal: AbortSignal.timeout(9_000),
         cache: "no-store",
       });
       if (response.ok) {
