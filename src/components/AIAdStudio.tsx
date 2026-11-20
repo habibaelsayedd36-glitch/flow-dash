@@ -2,42 +2,56 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Download, ImagePlus, Loader2, Sparkles } from "lucide-react";
-import { compose, cutout } from "@/lib/image-engine";
+import { cutout } from "@/lib/image-engine";
 
-type Style = "luxury" | "minimal" | "nature" | "studio" | "lifestyle";
-type Category = "beauty" | "electronics" | "fashion" | "food" | "home" | "general";
-
-const STYLES: Record<Style, string> = {
-  luxury: "premium luxury advertising lighting, elegant refined reflections, dramatic but balanced softbox lighting",
-  minimal: "clean modern minimal composition, bright diffused studio lighting, subtle realistic soft shadows",
-  nature: "fresh natural daylight, gentle organic lighting, delicate realistic highlights",
-  studio: "high-end commercial photography lighting, professional three-point softbox setup, realistic soft shadows",
-  lifestyle: "premium editorial product photography lighting, soft natural window-light effect, polished composition",
-};
-
-const CATEGORIES: Record<Category, string> = {
-  beauty: "premium cosmetics and skincare product photography, clean polished presentation",
-  electronics: "premium technology product photography, crisp precise highlights",
-  fashion: "premium fashion product photography, refined editorial presentation",
-  food: "appetizing premium food product photography, fresh realistic detail",
-  home: "premium homeware product photography, refined contemporary presentation",
-  general: "premium ecommerce product photography with a clean professional presentation",
-};
+const WIDTH = 1200;
+const HEIGHT = 2133;
 
 function canvasBlob(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) =>
-    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("Could not export the image."))), "image/png"),
+    canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("Could not export the image.")), "image/png"),
   );
+}
+
+function makeReferenceStyleImage(product: HTMLCanvasElement): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  canvas.width = WIDTH;
+  canvas.height = HEIGHT;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Your browser could not prepare the final image.");
+
+  // Match the supplied reference: a quiet near-white studio background,
+  // a single fully visible product, generous breathing room and a soft floor shadow.
+  ctx.fillStyle = "#F7F8FA";
+  ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+  const scale = Math.min((WIDTH * 0.78) / product.width, (HEIGHT * 0.72) / product.height);
+  const drawWidth = product.width * scale;
+  const drawHeight = product.height * scale;
+  const x = (WIDTH - drawWidth) / 2;
+  const y = (HEIGHT - drawHeight) / 2;
+
+  const shadow = ctx.createRadialGradient(WIDTH / 2, y + drawHeight + 22, 4, WIDTH / 2, y + drawHeight + 22, Math.max(90, drawWidth * 0.48));
+  shadow.addColorStop(0, "rgba(20, 24, 28, 0.16)");
+  shadow.addColorStop(0.55, "rgba(20, 24, 28, 0.055)");
+  shadow.addColorStop(1, "rgba(20, 24, 28, 0)");
+  ctx.fillStyle = shadow;
+  ctx.beginPath();
+  ctx.ellipse(WIDTH / 2, Math.min(HEIGHT - 100, y + drawHeight + 24), Math.max(90, drawWidth * 0.48), Math.max(16, drawWidth * 0.075), 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // The product pixels come from the user's upload. No image-generation model
+  // redraws the packaging, so logos, labels, colours and printed text stay intact.
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(product, x, y, drawWidth, drawHeight);
+  return canvas;
 }
 
 export function AIAdStudio() {
   const [file, setFile] = useState<File | null>(null);
-  const [style, setStyle] = useState<Style>("luxury");
-  const [category, setCategory] = useState<Category>("general");
-  const [extra, setExtra] = useState("");
   const [preview, setPreview] = useState("");
   const [busy, setBusy] = useState(false);
-  const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const originalUrl = useRef("");
@@ -48,10 +62,10 @@ export function AIAdStudio() {
 
   const chooseFile = (next: File | null) => {
     if (originalUrl.current) URL.revokeObjectURL(originalUrl.current);
-    if (preview) URL.revokeObjectURL(preview);
     setPreview((current) => { if (current) URL.revokeObjectURL(current); return ""; });
     setFile(next);
     setError("");
+    setStatus("");
     originalUrl.current = next ? URL.createObjectURL(next) : "";
   };
 
@@ -59,98 +73,24 @@ export function AIAdStudio() {
     if (!file || busy) return;
     setBusy(true);
     setError("");
+    setStatus("Removing the original background on your device…");
     setPreview((current) => { if (current) URL.revokeObjectURL(current); return ""; });
-    setProgress(0);
     try {
-      setStatus("Connecting to Cloudflare AI…");
-      // Edit the uploaded product photo directly, while explicitly protecting every printed label.
-      const prompt = [
-        "Create a premium, photorealistic commercial advertising image using the uploaded product photo as the exact reference.",
-        "CRITICAL: preserve every visible word, letter, number, logo, brand name, ingredient, volume, warning, symbol and tiny printed detail on the product exactly as it appears in the original image.",
-        "Do not rewrite, redraw, regenerate, replace, translate, invent, blur or distort any text or label. Keep the original label artwork and typography unchanged and fully legible.",
-        "Keep the product identity, packaging shape, cap, proportions and original colors faithful to the reference.",
-        "Improve only the photographic presentation: professional lighting, realistic reflections, clean edges, balanced exposure, premium advertising composition.",
-        STYLES[style],
-        CATEGORIES[category],
-        "Style direction: " + STYLES[style] + ".",
-        extra.trim() ? "Additional art direction: " + extra.trim() : "",
-        "Keep the entire product visible, realistic and proportional. Do not add text, logos, watermarks, hands or unrelated objects.",
-        "BACKGROUND REQUIREMENT — ABSOLUTE PRIORITY: use a perfectly pure, uniform, seamless WHITE background (#FFFFFF), exactly white from edge to edge. This is a clean Amazon main product image on white. No beige, gray, cream, colored tint, gradient, texture, scenery, room, backdrop decoration, props, pedestal, platform, patterns or environmental elements. Keep only the product and its natural subtle contact shadow on the pure white background. This white-background instruction overrides every other style, category or scene direction.",
-        "Square premium ecommerce main image, crisp professional quality, pure white background (#FFFFFF).",
-      ].filter(Boolean).join(" ");
-      setProgress(12);
-      setStatus("Sending your original product photo to Cloudflare image editing…");
-      // FLUX.2 Klein accepts reference images up to 512x512.
-      const sourceBitmap = await createImageBitmap(file);
-      const inputCanvas = document.createElement("canvas");
-      const inputScale = Math.min(512 / sourceBitmap.width, 512 / sourceBitmap.height, 1);
-      inputCanvas.width = Math.max(1, Math.round(sourceBitmap.width * inputScale));
-      inputCanvas.height = Math.max(1, Math.round(sourceBitmap.height * inputScale));
-      const inputContext = inputCanvas.getContext("2d");
-      if (!inputContext) {
-        sourceBitmap.close();
-        throw new Error("Your browser could not prepare the product image.");
-      }
-      inputContext.drawImage(sourceBitmap, 0, 0, inputCanvas.width, inputCanvas.height);
-      sourceBitmap.close();
-      const modelInputBlob = await canvasBlob(inputCanvas);
-      const bytes = new Uint8Array(await modelInputBlob.arrayBuffer());
-      let binary = "";
-      const chunkSize = 0x8000;
-      for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-        binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
-      }
-      const image_b64 = btoa(binary);
-      const controller = new AbortController();
-      const requestTimer = window.setTimeout(() => controller.abort(), 52_000);
-      let response: Response;
-      try {
-        response = await fetch("/api/ai-ad/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt, image_b64, image_type: "image/png" }),
-          signal: controller.signal,
-        });
-      } catch (requestError) {
-        if (controller.signal.aborted) throw new Error("Cloudflare image editing took too long. Please try again.");
-        throw requestError;
-      } finally {
-        window.clearTimeout(requestTimer);
-      }
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload.error || "Cloud image editing failed.");
-      }
-      setProgress(84);
-      setStatus("Removing the generated background and preparing pure white…");
-      const generatedBlob = await response.blob();
-      if (!generatedBlob.size || !generatedBlob.type.startsWith("image/")) {
-        throw new Error("Cloud AI returned an invalid image. Please try again.");
-      }
-
-      // Keep the AI-redrawn product, then isolate it from the model-generated
-      // backdrop and place it on a genuinely white Amazon canvas.
-      const separated = await cutout(generatedBlob, 0);
+      const separated = await cutout(file, 28);
       if (separated.flags.includes("nothing_found")) {
-        throw new Error("The product could not be separated from the generated background. Please try another photo.");
+        throw new Error("The product could not be detected. Try a clearer photo with the full product visible.");
       }
       if (separated.flags.includes("not_separated")) {
-        throw new Error("The generated background could not be separated cleanly. Please try generating the image again.");
+        throw new Error("The background could not be separated cleanly. Try another product photo.");
       }
-      setProgress(94);
-      setStatus("Placing the product on pure white (#FFFFFF)…");
-      const canvas = compose(separated, 2000, 0.85);
-
-      setStatus("Your AI-edited Amazon image is ready.");
-      setProgress(100);
-      const outputBlob = await canvasBlob(canvas);
-      setPreview(URL.createObjectURL(outputBlob));
-      setStatus("Your Amazon-ready main image is ready.");
-      setProgress(100);
+      setStatus("Creating your clean studio product photo…");
+      const output = makeReferenceStyleImage(separated.canvas);
+      const blob = await canvasBlob(output);
+      setPreview(URL.createObjectURL(blob));
+      setStatus("Your reference-style product image is ready.");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong while creating the ad.");
+      setError(e instanceof Error ? e.message : "Something went wrong while preparing the product image.");
       setStatus("");
-      setProgress(0);
     } finally {
       setBusy(false);
     }
@@ -160,7 +100,7 @@ export function AIAdStudio() {
     if (!preview) return;
     const a = document.createElement("a");
     a.href = preview;
-    a.download = "flow-amazon-main-image.png";
+    a.download = "flow-studio-product-image.png";
     a.click();
   };
 
@@ -180,53 +120,43 @@ export function AIAdStudio() {
         </label>
         <div className="card overflow-hidden p-3 sm:p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
-            <h3 className="h-section">Amazon main image result</h3>
-            <span className="rounded-full bg-lime-soft px-3 py-1 text-xs font-medium text-forest">AI product photo enhancement</span>
+            <h3 className="h-section">Studio product image</h3>
+            <span className="rounded-full bg-lime-soft px-3 py-1 text-xs font-medium text-forest">Original product preserved</span>
           </div>
           {preview ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={preview} alt="AI-generated product advertising scene" className="mx-auto aspect-square w-full max-w-xl rounded-xl object-contain" />
+            <img src={preview} alt="Reference-style studio product image" className="mx-auto max-h-[760px] w-auto max-w-full rounded-xl object-contain" />
           ) : (
-            <div className="grid aspect-square w-full place-items-center rounded-xl bg-sage-soft text-center text-sm text-mute">
+            <div className="grid aspect-[9/16] w-full place-items-center rounded-xl bg-sage-soft text-center text-sm text-mute">
               <div className="max-w-xs px-6">
                 <Sparkles className="mx-auto mb-3 text-moss" size={30} />
-                Your Amazon-ready main image will appear here.
+                Your clean studio product photo will appear here.
               </div>
             </div>
           )}
-          {preview && <button type="button" className="btn btn-primary mt-4 w-full" onClick={download}><Download size={16} /> Download PNG</button>}
+          {preview && <button type="button" className="btn btn-primary mt-4 w-full" onClick={download}><Download size={16} /> Download PNG · 1200 × 2133</button>}
         </div>
       </div>
 
       <aside className="card flex flex-col gap-5 p-5 sm:p-6">
         <div>
-          <h2 className="h-section">Create an ad scene</h2>
-          <p className="mt-1 text-[13px] leading-relaxed text-mute">AI enhances the original product photo and scene. The prompt explicitly protects all original printed words, labels, logos and numbers.</p>
+          <h2 className="h-section">Reference-style product photo</h2>
+          <p className="mt-1 text-[13px] leading-relaxed text-mute">Creates the clean studio look from your reference: a centered full product, soft natural contact shadow and a seamless near-white background.</p>
         </div>
-        <div>
-          <label className="label" htmlFor="ad-category">Product category</label>
-          <select id="ad-category" className="field" value={category} onChange={(e) => setCategory(e.target.value as Category)}>
-            <option value="general">General product</option><option value="beauty">Beauty & skincare</option><option value="electronics">Electronics</option><option value="fashion">Fashion</option><option value="food">Food & beverage</option><option value="home">Home & living</option>
-          </select>
-        </div>
-        <div>
-          <label className="label" htmlFor="ad-style">Advertising style</label>
-          <select id="ad-style" className="field" value={style} onChange={(e) => setStyle(e.target.value as Style)}>
-            <option value="luxury">Luxury campaign</option><option value="minimal">Minimal & clean</option><option value="nature">Natural & botanical</option><option value="studio">Professional studio</option><option value="lifestyle">Lifestyle editorial</option>
-          </select>
-        </div>
-        <div>
-          <label className="label" htmlFor="ad-extra">Scene details (optional)</label>
-          <textarea id="ad-extra" className="field min-h-24 resize-y" value={extra} onChange={(e) => setExtra(e.target.value)} placeholder="Example: warm beige marble, soft sunlight, delicate flowers…" maxLength={240} />
-        </div>
+        <ul className="space-y-2 text-sm text-mute">
+          <li>• Keeps the real product photo — no AI redraw</li>
+          <li>• Preserves the original label, logo, colours and printed text</li>
+          <li>• Portrait 1200 × 2133 export</li>
+          <li>• Runs locally in your browser; no paid image API</li>
+        </ul>
         <button type="button" className="btn btn-primary w-full" onClick={generate} disabled={!file || busy}>
           {busy ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-          {busy ? "Creating your ad…" : "Generate AI ad"}
+          {busy ? "Preparing product image…" : "Create reference-style image"}
         </button>
-        {busy && <div className="space-y-2" aria-live="polite"><div className="h-2 overflow-hidden rounded-full bg-sage-soft"><div className="h-full rounded-full bg-forest transition-all" style={{ width: progress + "%" }} /></div><p className="text-xs leading-relaxed text-mute">{status || "Working…"}</p><p className="text-[11px] text-mute">Keep this tab open while the image is being prepared.</p></div>}
+        {busy && <p className="text-xs leading-relaxed text-mute" aria-live="polite">{status}</p>}
         {error && <p role="alert" className="rounded-xl bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
         <div className="border-t border-line pt-4 text-xs leading-relaxed text-mute">
-          AI-enhanced product photo · Original label text must remain unchanged · 2000 × 2000 px export.
+          Free local processing · Original product details preserved · No paid API credits.
         </div>
       </aside>
     </section>
