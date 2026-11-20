@@ -36,6 +36,8 @@ export default async function SettingsPage() {
             current={provider ? { id: provider.id, label: provider.label, model: provider.model, masked: maskKey(provider.key), source: provider.source } : null}
             visionMasked={visionKey ? maskKey(visionKey) : ""}
             pixelAiMasked={pixelAiKey ? maskKey(pixelAiKey) : ""}
+            cloudflareAccountId={fluxConfig.accountId}
+            cloudflareTokenMasked={fluxConfig.token ? maskKey(fluxConfig.token) : ""}
           />
 
           <section className="card border border-red-200 p-5 sm:p-6" aria-labelledby="data-delete-title">
