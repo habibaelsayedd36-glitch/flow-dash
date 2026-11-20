@@ -90,16 +90,29 @@ export async function cutout(file: Blob, strength: number): Promise<Cutout> {
   } catch {
     throw new ModelLoadError();
   }
+  // Use the AI result ONLY as an alpha matte. Keep every visible product
+  // pixel (including printed text, logos and fine label details) from the
+  // user's original photograph; never use model-generated RGB pixels.
   const matte = await model.removeBackground(file);
-  const bitmap = await createImageBitmap(matte);
-  const srcMax = Math.max(bitmap.width, bitmap.height);
+  const [sourceBitmap, matteBitmap] = await Promise.all([
+    createImageBitmap(file),
+    createImageBitmap(matte),
+  ]);
+  const srcMax = Math.max(sourceBitmap.width, sourceBitmap.height);
   const scale = Math.min(1, FULL / srcMax);
-  const w = Math.max(1, Math.round(bitmap.width * scale));
-  const h = Math.max(1, Math.round(bitmap.height * scale));
+  const w = Math.max(1, Math.round(sourceBitmap.width * scale));
+  const h = Math.max(1, Math.round(sourceBitmap.height * scale));
   const [canvas, ctx] = makeCanvas(w, h);
   ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(bitmap, 0, 0, w, h);
-  bitmap.close();
+  ctx.drawImage(sourceBitmap, 0, 0, w, h);
+  // The segmentation model normally returns the same dimensions. If it does
+  // not, scale its mask to the original photo's dimensions without replacing
+  // the original product colors or lettering.
+  ctx.globalCompositeOperation = "destination-in";
+  ctx.drawImage(matteBitmap, 0, 0, w, h);
+  ctx.globalCompositeOperation = "source-over";
+  sourceBitmap.close();
+  matteBitmap.close();
 
   // Preserve the model's original alpha matte instead of hard-thresholding it.
   // Aggressive alpha clipping creates jagged edges and removes fine details,
