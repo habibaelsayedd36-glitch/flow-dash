@@ -298,7 +298,9 @@ made = await generateJobItem(provider, brief, m, job.tone, known, unknown, corre
         const quota = /429|rate.?limit|quota|tokens per (minute|day)|tpm|tpd|too many requests/i.test(message);
         const transient = /fetch failed|network|timeout|timed out|502|503|504|temporarily unavailable|could not reach its public product research service|internal server error|service unavailable/i.test(message);
         if (quota || !transient || attempt === 2) throw error;
-        await new Promise((resolve) => setTimeout(resolve, 700 * (attempt + 1)));
+        // Give transient Gemini overloads enough room to recover without
+        // flooding the free endpoint: 1.5s, 3s, then 6s between attempts.
+        await new Promise((resolve) => setTimeout(resolve, 1500 * (2 ** attempt)));
       }
     }
     if (!made) throw lastError instanceof Error ? lastError : new Error("Listing generation failed after automatic retries.");
@@ -329,9 +331,15 @@ export async function autoFixAllJobItemsAction(jobId: number): Promise<{ ok: boo
   if (!job || job.type !== "listing" || job.imported) return { ok: false, count: 0, error: "This listing batch cannot be edited." };
   const provider = await getAiProvider();
   if (!provider) return { ok: false, count: 0, error: "Connect your existing AI provider in Settings before running Auto-Fix." };
-  const items = job.items.map((item) => item.content && item.status === "done" ? { ...item, status: "pending" as const, error: undefined } : item);
-  const count = items.filter((item) => item.status === "pending" && Boolean(item.content)).length;
-  if (!count) return { ok: false, count: 0, error: "There are no completed listings to auto-fix." };
+  // Re-run every completed listing through compliance correction and retry failed rows
+  // that never received content (for example, after a temporary Gemini 503).
+  const items = job.items.map((item) =>
+    item.status === "done" || item.status === "failed"
+      ? { ...item, status: "pending" as const, error: undefined }
+      : item
+  );
+  const count = items.filter((item) => item.status === "pending").length;
+  if (!count) return { ok: false, count: 0, error: "There are no completed or failed rows to auto-fix." };
   await db.update(jobs).set({ items, status: "running" }).where(eq(jobs.id, jobId));
   refresh();
   return { ok: true, count };
