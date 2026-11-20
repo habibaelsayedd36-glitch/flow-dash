@@ -193,8 +193,8 @@ export async function cutout(file: Blob, strength: number): Promise<Cutout> {
   const level = Math.max(0, Math.min(100, strength));
   // Remove more of the low-confidence halo and cast-shadow matte. Keep a
   // gradual edge transition so the silhouette does not become jagged.
-  const low = 96 + level * 0.36;
-  const high = 218 + level * 0.18;
+  const low = 110 + level * 0.32;
+  const high = 220 + level * 0.16;
   for (let i = 0; i < d.length; i += 4) {
     const alpha = d[i + 3];
     if (alpha <= low) {
@@ -215,8 +215,9 @@ export async function cutout(file: Blob, strength: number): Promise<Cutout> {
       const b = d[i + 2];
       const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
       const chroma = Math.max(r, g, b) - Math.min(r, g, b);
-      const boost = chroma < 24 ? 1 : 1.58;
-      const contrast = (channel: number) => (channel - 128) * 1.08 + 128;
+      // Boost even pale product colors; skip only genuinely neutral pixels.
+      const boost = chroma < 8 ? 1 : 1.75;
+      const contrast = (channel: number) => (channel - 128) * 1.07 + 128;
       const lift = (channel: number) => Math.max(0, Math.min(255, Math.round(contrast(luma) + (contrast(channel) - contrast(luma)) * boost)));
       d[i] = lift(r);
       d[i + 1] = lift(g);
