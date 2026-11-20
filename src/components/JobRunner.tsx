@@ -100,7 +100,7 @@ export function JobRunner({ jobId, items, hasClient, clientName, imported, statu
     const res = await autoFixAllJobItemsAction(jobId);
     setBusy("");
     if (!res.ok) { setNotice(res.error ?? "Could not start Auto-Fix."); return; }
-    setNotice("Auto-Fix started for all " + res.count + " completed listings. Progress is saved after each product.");
+    setNotice("Auto-Fix queued " + res.count + " completed or failed rows for regeneration. Progress is saved after each product.");
     router.refresh();
   };
   const addToPipeline = async () => {
