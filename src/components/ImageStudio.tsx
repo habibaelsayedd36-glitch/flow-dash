@@ -1,7 +1,6 @@
 "use client";
 
 import { zipSync } from "fflate";
-import { Client, handle_file } from "@gradio/client";
 import { Download, ImagePlus, Loader2, RefreshCw, Trash2, TriangleAlert, WandSparkles } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { logImageJobAction } from "@/app/actions-tools";
@@ -117,69 +116,49 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
     if (fluxBusy.includes(shot.id)) return;
     setFluxBusy((list) => [...list, shot.id]);
     setMessage("");
-    const space = "https://xurxowsky-flux2-klein-4b-playground.hf.space";
-    const productPrompt = [
-      "Carefully retouch the uploaded product reference into a premium ecommerce studio photograph. This is a conservative image-to-image edit: preserve the photographed product and its identity; do not replace it with a newly imagined object.",
-      "The uploaded photograph is the single source of truth. Preserve the exact same real product identity and design: silhouette, geometry, proportions, dimensions, packaging shape, cap, pump, closure, material, surface finish, colors, logo, brand mark, label placement, label layout, typography, icons and every visible printed word.",
-      "Do not redesign, recolor, simplify, beautify by changing the product, add or remove parts, invent accessories, duplicate the product, translate text, or make up label wording. Keep the printed label faithful to the reference; never replace uncertain small text with invented writing.",
-      "Create a perfectly seamless pure white #FFFFFF background edge-to-edge. Show one product only, upright, front-facing, centered, fully visible with safe margins, occupying about 85 percent of a square frame.",
-      "Improve only the photography: polished commercial studio lighting, accurate white balance and product colors, crisp realistic edges, clean fine detail, natural material reflections, controlled highlights, and a subtle realistic contact shadow directly beneath the product. Keep the product itself as close as possible to the reference pixels.",
-      "The result should look like the same exact product professionally photographed for a high-end marketplace main image. No props, scenery, gradients, colored backgrounds, extra text, watermark, border, or frame."
-    ].join(" ");
-    const findImageUrl = (value: unknown): string | null => {
-      if (!value || typeof value !== "object") return null;
-      const item = value as Record<string, unknown>;
-      if (typeof item.url === "string" && item.url) return item.url.startsWith("/") ? `${space}${item.url}` : item.url;
-      if (typeof item.path === "string" && item.path) return `${space}/gradio_api/file=${encodeURIComponent(item.path)}`;
-      for (const child of Object.values(item)) {
-        if (Array.isArray(child)) {
-          for (const entry of child) { const found = findImageUrl(entry); if (found) return found; }
-        } else { const found = findImageUrl(child); if (found) return found; }
-      }
-      return null;
-    };
-    try {
-      // Official Gradio client manages Space discovery, upload, queueing and SSE.
-      const bitmap = await createImageBitmap(shot.file);
-      const scale = Math.min(1024 / bitmap.width, 1024 / bitmap.height, 1);
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-      const context = canvas.getContext("2d");
-      if (!context) { bitmap.close(); throw new Error("Could not prepare the Hugging Face FLUX reference image."); }
-      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-      bitmap.close();
-      const reference = await new Promise<Blob>((resolve, reject) =>
-        canvas.toBlob((value) => value ? resolve(value) : reject(new Error("Could not encode the FLUX reference image.")), "image/png"),
-      );
-      setMessage("Connecting to the free Hugging Face Space…");
-      const app = await Client.connect("Xurxowsky/flux2-klein-4b-playground");
-      // The Space keeps its image-to-image selection in Gradio state. Activate that tab
-      // in this client session before calling the generation event, or it may use T2I mode.
-      setMessage("Selecting Image to Image mode on the free Hugging Face Space…");
-      await app.predict("/on_select_i2i", []);
-      setMessage("Waiting for the free ZeroGPU queue and regenerating your uploaded product photo. This may take a minute or longer; keep this tab open…");
-      const result = await app.predict("/generate_images", [
-        "",
-        productPrompt,
-        handle_file(reference),
-        0.35,
-        "Photoreal / Fotorrealista",
-        "Square 1:1 / Cuadrado 1:1",
-        4,
-        4.0,
-        Math.floor(Math.random() * 2_000_000_000),
-      ]);
-      const resultPayload = result.data;
-      const imageUrl = findImageUrl(resultPayload);
-      if (!imageUrl) throw new Error("FLUX finished but did not return a usable image. Please retry.");
 
-      const generated = await fetch(imageUrl, { cache: "no-store" });
-      if (!generated.ok) throw new Error("The generated image could not be downloaded from Hugging Face.");
+    try {
+      // Cloudflare FLUX.2 Klein accepts reference images smaller than 512x512.
+      // Fit the complete source photo inside a 480px square without cropping it.
+      const bitmap = await createImageBitmap(shot.file);
+      const canvas = document.createElement("canvas");
+      canvas.width = 480;
+      canvas.height = 480;
+      const context = canvas.getContext("2d");
+      if (!context) {
+        bitmap.close();
+        throw new Error("Could not prepare the reference product photo.");
+      }
+      context.fillStyle = "#FFFFFF";
+      context.fillRect(0, 0, 480, 480);
+      const scale = Math.min(448 / bitmap.width, 448 / bitmap.height, 1);
+      const width = Math.max(1, Math.round(bitmap.width * scale));
+      const height = Math.max(1, Math.round(bitmap.height * scale));
+      context.drawImage(bitmap, (480 - width) / 2, (480 - height) / 2, width, height);
+      bitmap.close();
+
+      const reference = await new Promise<Blob>((resolve, reject) =>
+        canvas.toBlob((value) => value ? resolve(value) : reject(new Error("Could not encode the reference product photo.")), "image/png"),
+      );
+      const form = new FormData();
+      form.append("image", reference, `${slug(shot.file.name)}-reference.png`);
+      setMessage("Sending your product photo to free Cloudflare FLUX.2 Klein 4B…");
+
+      const generated = await fetch("/api/ai-ad/cloudflare", {
+        method: "POST",
+        body: form,
+        cache: "no-store",
+      });
+      if (!generated.ok) {
+        const payload = await generated.json().catch(() => ({})) as { error?: string };
+        throw new Error(payload.error || `Cloudflare FLUX image editing failed (HTTP ${generated.status}).`);
+      }
       const generatedBlob = await generated.blob();
-      if (!generatedBlob.size || !generatedBlob.type.startsWith("image/")) throw new Error("FLUX returned an invalid image.");
-      // Flatten any transparent pixels onto pure white so preview and exported file
-      // always have the required marketplace #FFFFFF background.
+      if (!generatedBlob.size || !generatedBlob.type.startsWith("image/")) {
+        throw new Error("Cloudflare returned an invalid image.");
+      }
+
+      // Always flatten transparency onto pure white for marketplace output.
       const generatedBitmap = await createImageBitmap(generatedBlob);
       const whiteCanvas = document.createElement("canvas");
       whiteCanvas.width = generatedBitmap.width;
@@ -193,19 +172,16 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
       whiteContext.fillRect(0, 0, whiteCanvas.width, whiteCanvas.height);
       whiteContext.drawImage(generatedBitmap, 0, 0);
       generatedBitmap.close();
+
       const blob = await new Promise<Blob>((resolve, reject) =>
         whiteCanvas.toBlob((value) => value ? resolve(value) : reject(new Error("Could not flatten the generated image onto white.")), "image/png"),
       );
       const preview = URL.createObjectURL(blob);
       if (shot.preview) URL.revokeObjectURL(shot.preview);
       patch(shot.id, { preview, aiBlob: blob });
-      setMessage("Free Hugging Face FLUX.2 Klein generated a new studio-style image. Check every label against the original before downloading.");
+      setMessage("Cloudflare FLUX.2 Klein generated a new studio-style image. Check every label against the original before downloading.");
     } catch (error) {
-      setMessage(error instanceof Error
-        ? error.message.includes("Failed to fetch")
-          ? "Could not connect to the free Hugging Face Space. Check that the Space is running, then try again."
-          : error.message
-        : "FLUX image editing failed.");
+      setMessage(error instanceof Error ? error.message : "Cloudflare FLUX image editing failed.");
     } finally {
       setFluxBusy((list) => list.filter((id) => id !== shot.id));
     }
@@ -497,8 +473,8 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
         <div>
           <h2 className="h-section">{mode === "cleanup" ? "Output" : "Product and marketplaces"}</h2>
           <p className="mt-1 text-[13px] leading-relaxed text-mute">
-            {mode === "cleanup" ? "Remove the background locally, or regenerate the product photo with FLUX.2 Klein 4B on Hugging Face ZeroGPU. " : "Upload your real product photos, then clean and export them for marketplace image requirements. "}
-            Local background cleanup is automatic. Free Hugging Face FLUX.2 Klein 4B runs only when you click Generate. GPU queue and cold starts may cause a wait. No Cloudflare account or paid fallback is used.
+            {mode === "cleanup" ? "Remove the background locally, or regenerate the product photo with FLUX.2 Klein 4B on Cloudflare Workers AI. " : "Upload your real product photos, then clean and export them for marketplace image requirements. "}
+            Local background cleanup is automatic. Free Cloudflare Workers AI FLUX.2 Klein 4B runs only when you click Generate. A daily free usage limit applies; no paid fallback is used.
           </p>
         </div>
 
