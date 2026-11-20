@@ -325,7 +325,7 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
     let lastError: Error | null = null;
 
     for (const model of models) {
-      for (let attempt = 0; attempt < 3; attempt++) {
+      for (let attempt = 0; attempt < 2; attempt++) {
         let response: Response;
         try {
           response = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
@@ -340,7 +340,7 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
               store: false,
               ...(json ? { response_format: { type: "text", mime_type: "application/json" } } : {}),
             }),
-            signal: AbortSignal.timeout(60_000),
+            signal: AbortSignal.timeout(35_000),
             cache: "no-store",
           });
         } catch (error) {
@@ -365,8 +365,8 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
           if (retryable && attempt < 2) {
             const retryAfter = Number(response.headers.get("retry-after") || "");
             const delay = Number.isFinite(retryAfter) && retryAfter > 0
-              ? Math.min(15_000, retryAfter * 1000)
-              : Math.min(8_000, 1_000 * 2 ** attempt);
+              ? Math.min(3_000, retryAfter * 1000)
+              : Math.min(2_000, 750 * 2 ** attempt);
             await new Promise((resolve) => setTimeout(resolve, delay));
             continue;
           }
@@ -633,7 +633,7 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
     try {
       const response = await fetch(searchUrl, {
         headers: { accept: "text/plain, text/markdown, */*" },
-        signal: AbortSignal.timeout(9_000),
+        signal: AbortSignal.timeout(5_000),
         cache: "no-store",
       });
       if (!response.ok) return null;
@@ -723,7 +723,7 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
       .replace(/\n{3,}/g, "\n\n")
       .trim()
   );
-  const pages = await Promise.all(results.slice(0, 4).map(async (result) => {
+  const pages = await Promise.all(results.slice(0, 2).map(async (result) => {
     // Try the clean Reader representation first.
     try {
       const response = await fetch("https://r.jina.ai/" + result.url, {
@@ -758,7 +758,7 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
       const jsonUrl = result.url.replace(/\/$/, "") + ".js";
       const response = await fetch(jsonUrl, {
         headers: { accept: "application/json" },
-        signal: AbortSignal.timeout(12_000),
+        signal: AbortSignal.timeout(5_000),
         cache: "no-store",
       });
       if (response.ok) {
