@@ -206,11 +206,11 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
           throw new Error(`Hugging Face could not read the ${endpoint} result (HTTP ${result.status}).`);
         }
         const stream = await result.text();
-        const events = stream.split(/\\r?\\n(?=event:)/);
-        const completed = events.find((event) => /^event:\\s*complete\\s*$/m.test(event));
+        const events = stream.split(/\r?\n(?=event:)/);
+        const completed = events.find((event) => /^event:\s*complete\s*$/m.test(event));
         if (!completed) {
-          const errorEvent = events.find((event) => /^event:\\s*error\\s*$/m.test(event));
-          const dataLine = errorEvent?.split(/\\r?\\n/).find((line) => line.startsWith("data:"));
+          const errorEvent = events.find((event) => /^event:\s*error\s*$/m.test(event));
+          const dataLine = errorEvent?.split(/\r?\n/).find((line) => line.startsWith("data:"));
           const rawDetail = dataLine?.slice(5).trim() ?? "";
           let detail = "";
           if (rawDetail && rawDetail !== "null" && rawDetail !== "undefined") {
@@ -227,7 +227,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
           }
           throw new Error(detail || `Hugging Face returned no details for ${endpoint}. Raw response: ${stream.slice(0, 700)}`);
         }
-        const dataLine = completed.split(/\\r?\\n/).find((line) => line.startsWith("data:"));
+        const dataLine = completed.split(/\r?\n/).find((line) => line.startsWith("data:"));
         if (!dataLine) throw new Error(`Hugging Face returned an empty ${endpoint} result.`);
         return JSON.parse(dataLine.slice(5).trim()) as unknown;
       };
