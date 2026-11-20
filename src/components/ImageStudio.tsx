@@ -38,22 +38,19 @@ async function imageAsBase64(file: File): Promise<string> {
   return btoa(binary);
 }
 
-function anglePrompt(angle: Exclude<Angle, "front">, productDescription: string): string {
+function anglePrompt(angle: Exclude<Angle, "front">): string {
   const view = {
-    side: "Create a true 90-degree side profile view, showing the product's side silhouette, depth and real construction.",
-    back: "Rotate the same product to show its rear side directly, as a realistic straight-on back view.",
-    detail: "Create a premium macro commercial photograph of a real visible product detail, preserving the exact material, finish, cap, dispenser and texture.",
+    side: "Show a genuine 90-degree side profile of the SAME physical product. The camera must see its side silhouette and depth, not another front view. Do not invent unseen construction; keep the visible design faithful to the reference.",
+    back: "Show the rear of the SAME physical product, as if the real item has been turned around 180 degrees. Preserve its exact shape, materials and colors. Do not invent label wording or hidden details; leave uncertain rear text absent rather than fabricate it.",
+    detail: "Create a close commercial detail photograph of the SAME product, focusing on a real visible feature from the reference such as its cap, pump, nozzle, material or label texture. Do not invent a new component.",
   }[angle];
   return [
-    "Act as a senior commercial product photographer and high-end ecommerce retoucher.",
-    "Edit the supplied reference photo into ONE photorealistic, premium advertising-quality studio product photograph.",
+    "Perform true image-to-image editing using the uploaded photo as the visual reference and source of truth. Generate ONE photorealistic ecommerce studio photograph.",
     view,
-    "BACKGROUND IS MANDATORY: perfectly pure seamless white #FFFFFF, evenly white edge-to-edge. No grey, cream, gradients, scenery, colored surfaces, props, decorations, text overlays, frames or watermarks.",
-    `REFERENCE PHOTO ANALYSIS (supplementary only; the uploaded photo remains the source of truth): ${productDescription}`,
-    "PRODUCT FIDELITY IS CRITICAL: preserve the exact product identity, silhouette, geometry, proportions, packaging, cap/pump, materials, colors, finish, label layout, logos and every legible word. Do not redesign, beautify by changing the product, invent text, repair labels by guessing, add accessories or create extra products.",
-    "Make the product itself look professionally photographed: crisp fine detail, high resolution, clean realistic edges, balanced premium studio key light with soft fill, accurate white balance, controlled highlights, natural material reflections, rich but true-to-life color, subtle realistic contact shadow directly beneath the product.",
-    "The product must be upright, fully visible from top to bottom, large and precisely centered, occupying approximately 85–90% of the square frame while keeping safe margins so no part is cropped. Match the clean premium marketplace MAIN-image style: pure white #FFFFFF background, front-facing catalog presentation when the requested angle is front, professional studio lighting, crisp realistic detail and polished commercial retouching. For side, back and detail requests, preserve the requested camera angle while keeping the same white-background studio style and exact product identity.",
-    "Do not create a lifestyle scene. Do not add any background objects. The only subject is the exact product on pure white.",
+    "Keep the same exact product identity, package silhouette, geometry, proportions, cap, pump, closure, material, finish, colors, logo and label design. Never replace it with a house, room, person, unrelated object or a different product.",
+    "Do not invent or rewrite any text, logo, label, accessory or product feature. Preserve only details supported by the reference photo.",
+    "Use a seamless pure white #FFFFFF background edge-to-edge, professional soft studio lighting, realistic product texture, crisp edges, natural reflections and a subtle contact shadow. No props, scenery, gradients, decorations, frames or watermarks.",
+    "Keep the requested camera angle obvious and do not silently return a front-facing image for side or back.",
   ].join(" ");
 }
 
@@ -240,26 +237,37 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
     if (!source || angleTargets.length === 0 || generatingAngles) return;
     setGeneratingAngles(true);
     setMessage("");
+    const generatedAngles: Angle[] = [];
     try {
-      const image_b64 = await imageAsBase64(source.file);
-      setAngleStatus("Free mode does not include reference-based image generation.");
-      const analysisResponse = await fetch("/api/ai-ad/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image_b64, image_type: "image/png" }),
-      });
-      const analysisPayload = await analysisResponse.json().catch(() => ({})) as { description?: string; error?: string };
-      if (!analysisResponse.ok || !analysisPayload.description) throw new Error(analysisPayload.error || "Could not analyze the reference product photo.");
-      const productDescription = analysisPayload.description;
+      // Prepare a complete, uncropped reference on white for the image-to-image model.
+      const bitmap = await createImageBitmap(source.file);
+      const canvas = document.createElement("canvas");
+      canvas.width = 480;
+      canvas.height = 480;
+      const context = canvas.getContext("2d");
+      if (!context) {
+        bitmap.close();
+        throw new Error("Could not prepare the reference product photo.");
+      }
+      context.fillStyle = "#FFFFFF";
+      context.fillRect(0, 0, 480, 480);
+      const scale = Math.min(448 / bitmap.width, 448 / bitmap.height, 1);
+      const width = Math.max(1, Math.round(bitmap.width * scale));
+      const height = Math.max(1, Math.round(bitmap.height * scale));
+      context.drawImage(bitmap, (480 - width) / 2, (480 - height) / 2, width, height);
+      bitmap.close();
+      const reference = await new Promise<Blob>((resolve, reject) =>
+        canvas.toBlob((value) => value ? resolve(value) : reject(new Error("Could not encode the reference photo.")), "image/png"),
+      );
+
       for (const angle of angleTargets) {
-        setAngleStatus(`Generating ${ANGLE_LABEL[angle]} view…`);
-        const response = await fetch("/api/ai-ad/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: anglePrompt(angle, productDescription), image_b64, image_type: "image/png" }),
-        });
+        setAngleStatus(`Generating ${ANGLE_LABEL[angle]} view with free FLUX…`);
+        const form = new FormData();
+        form.append("image", reference, "product-reference.png");
+        form.append("prompt", anglePrompt(angle));
+        const response = await fetch("/api/ai-ad/cloudflare", { method: "POST", body: form, cache: "no-store" });
         if (!response.ok) {
-          const payload = await response.json().catch(() => ({}));
+          const payload = await response.json().catch(() => ({})) as { error?: string };
           throw new Error(payload.error || `Could not generate the ${ANGLE_LABEL[angle]} view.`);
         }
         const blob = await response.blob();
@@ -278,12 +286,14 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
           angle,
         };
         setShots((list) => [...list, generatedShot]);
+        generatedAngles.push(angle);
       }
       setAngleStatus("");
-      setMessage(`Generated ${angleTargets.length} new angle view(s). They are being cleaned and will be included in your ZIP.`);
+      setMessage(`Generated ${generatedAngles.length} angle view(s) with free FLUX. They are being cleaned; check each view against the original before downloading.`);
     } catch (error) {
       setAngleStatus("");
-      setMessage(error instanceof Error ? error.message : "Could not generate the additional product angles.");
+      const detail = error instanceof Error ? error.message : "Could not generate the additional product angles.";
+      setMessage(generatedAngles.length ? `Generated ${generatedAngles.length} view(s); stopped after an error: ${detail}` : detail);
     } finally {
       setGeneratingAngles(false);
     }
