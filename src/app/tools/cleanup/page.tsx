@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: "Image Clean-up | FLOW" };
 export default function ImageCleanupPage() {
   return (
     <>
-      <PageHeader title="Image Clean-up" sub="Turn a simple product photo into a polished advertising scene with free, on-device AI." />
+      <PageHeader title="Image Clean-up" sub="Use Cloudinary AI to create a polished white-background e-commerce product photo." />
       <AIAdStudio />
       <details className="card mt-6 p-4 sm:p-5">
         <summary className="cursor-pointer font-display text-base font-semibold text-ink">Classic white-background clean-up</summary>
