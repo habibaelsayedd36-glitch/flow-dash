@@ -154,7 +154,11 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
       );
       setMessage("Connecting to the free Hugging Face Space…");
       const app = await Client.connect("Xurxowsky/flux2-klein-4b-playground");
-      setMessage("Waiting for the free ZeroGPU queue and regenerating your product photo. This may take a minute or longer; keep this tab open…");
+      // The Space keeps its image-to-image selection in Gradio state. Activate that tab
+      // in this client session before calling the generation event, or it may use T2I mode.
+      setMessage("Selecting Image to Image mode on the free Hugging Face Space…");
+      await app.predict("/on_select_i2i", []);
+      setMessage("Waiting for the free ZeroGPU queue and regenerating your uploaded product photo. This may take a minute or longer; keep this tab open…");
       const result = await app.predict("/generate_images", [
         "",
         productPrompt,
