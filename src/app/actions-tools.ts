@@ -21,15 +21,22 @@ const clamp = (v: unknown, min: number, max: number, fallback: number) => {
 };
 
 /** Stable, readable codes for merchant + brand SKU namespaces. */
+function stableTextHash(value: string): string {
+  let hash = 0;
+  for (const char of value) hash = (hash * 31 + char.codePointAt(0)!) >>> 0;
+  return hash.toString(36).toUpperCase().slice(0, 4).padStart(4, "0");
+}
+
 function skuCode(value: string, fallback: string): string {
   const words = value.normalize("NFKD").replace(/[\\u0300-\\u036f]/g, "").toUpperCase().match(/[A-Z0-9]+/g) ?? [];
   const initials = words.map((word) => word[0]).join("");
   const compact = words.join("");
-  return (initials.length >= 2 ? initials : compact).slice(0, 5) || fallback;
+  return (initials.length >= 2 ? initials : compact).slice(0, 5) || (value.trim() ? `X${stableTextHash(value)}` : fallback);
 }
 
 function skuIdentity(value: string): string {
-  return value.normalize("NFKD").replace(/[\\u0300-\\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const normalized = value.normalize("NFKD").replace(/[\\u0300-\\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return normalized || (value.trim() ? `unicode-${stableTextHash(value)}` : "");
 }
 
 // ----------------------------------------------------------------- AI key
