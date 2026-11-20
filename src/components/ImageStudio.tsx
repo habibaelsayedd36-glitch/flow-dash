@@ -110,36 +110,34 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
   };
 
   const generateWithFlux = async (shot: Shot) => {
-    if (fluxBusy.includes(shot.id)) return;
+    if (fluxBusy.includes(shot.id) || !shot.cut) return;
     setFluxBusy((list) => [...list, shot.id]);
     setMessage("");
 
     try {
-      // Cloudflare FLUX.2 Klein accepts reference images smaller than 512x512.
-      // Fit the complete source photo inside a 480px square without cropping it.
-      const bitmap = await createImageBitmap(shot.file);
-      const canvas = document.createElement("canvas");
-      canvas.width = 480;
-      canvas.height = 480;
-      const context = canvas.getContext("2d");
-      if (!context) {
-        bitmap.close();
-        throw new Error("Could not prepare the reference product photo.");
-      }
-      context.fillStyle = "#FFFFFF";
-      context.fillRect(0, 0, 480, 480);
-      const scale = Math.min(448 / bitmap.width, 448 / bitmap.height, 1);
-      const width = Math.max(1, Math.round(bitmap.width * scale));
-      const height = Math.max(1, Math.round(bitmap.height * scale));
-      context.drawImage(bitmap, (480 - width) / 2, (480 - height) / 2, width, height);
-      bitmap.close();
-
+      // Ask FLUX for an EMPTY studio background only. Never send the product
+      // to the generative model, so it cannot rewrite labels, logos or geometry.
+      const blank = document.createElement("canvas");
+      blank.width = 480;
+      blank.height = 480;
+      const blankContext = blank.getContext("2d");
+      if (!blankContext) throw new Error("Could not prepare the studio background.");
+      blankContext.fillStyle = "#FFFFFF";
+      blankContext.fillRect(0, 0, 480, 480);
       const reference = await new Promise<Blob>((resolve, reject) =>
-        canvas.toBlob((value) => value ? resolve(value) : reject(new Error("Could not encode the reference product photo.")), "image/png"),
+        blank.toBlob((value) => value ? resolve(value) : reject(new Error("Could not encode the studio background reference.")), "image/png"),
       );
+
       const form = new FormData();
-      form.append("image", reference, `${slug(shot.file.name)}-reference.png`);
-      setMessage("Sending your product photo to free Cloudflare FLUX.2 Klein 4B…");
+      form.append("image", reference, "empty-studio-reference.png");
+      form.append("prompt", [
+        "Create a premium, photorealistic EMPTY ecommerce product photography studio background only.",
+        "There must be absolutely NO product, NO bottle, NO package, NO object, NO text, NO logo, NO props and NO watermark anywhere in the image.",
+        "Square seamless pure white #FFFFFF cyclorama background, extremely subtle realistic studio floor gradient and soft diffused lighting, clean white commercial photography sweep, very faint natural floor shading only.",
+        "Keep the center completely empty and unobstructed because the real product will be composited over it later.",
+        "No shadows shaped like an object, no pedestal, no scenery, no decorations, no borders."
+      ].join(" "));
+      setMessage("Generating an empty studio background with free FLUX. The original product and its printed text will be preserved.");
 
       const generated = await fetch("/api/ai-ad/cloudflare", {
         method: "POST",
@@ -148,37 +146,53 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
       });
       if (!generated.ok) {
         const payload = await generated.json().catch(() => ({})) as { error?: string };
-        throw new Error(payload.error || `Cloudflare FLUX image editing failed (HTTP ${generated.status}).`);
+        throw new Error(payload.error || `Cloudflare FLUX background generation failed (HTTP ${generated.status}).`);
       }
-      const generatedBlob = await generated.blob();
-      if (!generatedBlob.size || !generatedBlob.type.startsWith("image/")) {
-        throw new Error("Cloudflare returned an invalid image.");
+      const backgroundBlob = await generated.blob();
+      if (!backgroundBlob.size || !backgroundBlob.type.startsWith("image/")) {
+        throw new Error("Cloudflare returned an invalid studio background.");
       }
 
-      // Always flatten transparency onto pure white for marketplace output.
-      const generatedBitmap = await createImageBitmap(generatedBlob);
-      const whiteCanvas = document.createElement("canvas");
-      whiteCanvas.width = generatedBitmap.width;
-      whiteCanvas.height = generatedBitmap.height;
-      const whiteContext = whiteCanvas.getContext("2d");
-      if (!whiteContext) {
-        generatedBitmap.close();
-        throw new Error("Could not prepare the white-background output image.");
+      // Composite the untouched original cutout over the AI background.
+      // FLUX never receives or redraws the product itself.
+      const [backgroundBitmap, productBitmap] = await Promise.all([
+        createImageBitmap(backgroundBlob),
+        createImageBitmap(shot.cut.canvas),
+      ]);
+      const output = document.createElement("canvas");
+      output.width = 1024;
+      output.height = 1024;
+      const outputContext = output.getContext("2d");
+      if (!outputContext) {
+        backgroundBitmap.close();
+        productBitmap.close();
+        throw new Error("Could not compose the final product image.");
       }
-      whiteContext.fillStyle = "#FFFFFF";
-      whiteContext.fillRect(0, 0, whiteCanvas.width, whiteCanvas.height);
-      whiteContext.drawImage(generatedBitmap, 0, 0);
-      generatedBitmap.close();
+      outputContext.fillStyle = "#FFFFFF";
+      outputContext.fillRect(0, 0, output.width, output.height);
+      const bgScale = Math.max(output.width / backgroundBitmap.width, output.height / backgroundBitmap.height);
+      const bgWidth = backgroundBitmap.width * bgScale;
+      const bgHeight = backgroundBitmap.height * bgScale;
+      outputContext.drawImage(backgroundBitmap, (output.width - bgWidth) / 2, (output.height - bgHeight) / 2, bgWidth, bgHeight);
+      backgroundBitmap.close();
+
+      const productScale = (output.width * 0.85) / Math.max(productBitmap.width, productBitmap.height);
+      const productWidth = productBitmap.width * productScale;
+      const productHeight = productBitmap.height * productScale;
+      outputContext.imageSmoothingEnabled = true;
+      outputContext.imageSmoothingQuality = "high";
+      outputContext.drawImage(productBitmap, (output.width - productWidth) / 2, (output.height - productHeight) / 2, productWidth, productHeight);
+      productBitmap.close();
 
       const blob = await new Promise<Blob>((resolve, reject) =>
-        whiteCanvas.toBlob((value) => value ? resolve(value) : reject(new Error("Could not flatten the generated image onto white.")), "image/png"),
+        output.toBlob((value) => value ? resolve(value) : reject(new Error("Could not encode the final studio image.")), "image/png"),
       );
       const preview = URL.createObjectURL(blob);
       if (shot.preview) URL.revokeObjectURL(shot.preview);
       patch(shot.id, { preview, aiBlob: blob });
-      setMessage("Cloudflare FLUX.2 Klein generated a new studio-style image. Check every label against the original before downloading.");
+      setMessage("AI studio background generated. The product, original label text and logo were composited from your source photo without AI redraw.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Cloudflare FLUX image editing failed.");
+      setMessage(error instanceof Error ? error.message : "Cloudflare FLUX background generation failed.");
     } finally {
       setFluxBusy((list) => list.filter((id) => id !== shot.id));
     }
