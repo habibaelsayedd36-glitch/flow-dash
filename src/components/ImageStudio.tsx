@@ -71,7 +71,8 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
   const [angleTargets, setAngleTargets] = useState<Exclude<Angle, "front">[]>(["side", "back", "detail"]);
   const [generatingAngles, setGeneratingAngles] = useState(false);
   const [angleStatus, setAngleStatus] = useState("");
-  const [pixelcutBusy, setPixelcutBusy] = useState<string[]>([]);\n  const [fluxBusy, setFluxBusy] = useState<string[]>([]);
+  const [pixelcutBusy, setPixelcutBusy] = useState<string[]>([]);
+  const [fluxBusy, setFluxBusy] = useState<string[]>([]);
   const shotsRef = useRef<Shot[]>([]);
   const running = useRef(false);
   const settings = useRef({ tolerance, fill });
