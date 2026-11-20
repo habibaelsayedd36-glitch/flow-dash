@@ -183,14 +183,13 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
       }
 
       setMessage("Waiting for the free ZeroGPU queue and regenerating your product photo. This may take a minute or longer; keep this tab open…");
-      // Gradio keeps gr.State on the server per session. The mode selector is
-      // a State output, so it must be set first in the same session. State is
-      // intentionally omitted from generate_images API data.
+      // Match the live Hugging Face API documentation: select image-to-image
+      // mode in this session, then call generate_images with its 9 documented inputs.
       const sessionHash = crypto.randomUUID();
       const runSpaceEndpoint = async (endpoint: string, data: unknown[]) => {
         const response = await fetch(`${space}/gradio_api/call/${endpoint}`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "x-gradio-user": "api" },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ data, session_hash: sessionHash }),
           cache: "no-store",
         });
@@ -200,17 +199,17 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
         }
         const result = await fetch(
           `${space}/gradio_api/call/${endpoint}/${encodeURIComponent(payload.event_id)}`,
-          { headers: { "x-gradio-user": "api" }, cache: "no-store" },
+          { cache: "no-store" },
         );
         if (!result.ok) {
           throw new Error(`Hugging Face could not read the ${endpoint} result (HTTP ${result.status}).`);
         }
         const stream = await result.text();
-        const events = stream.split(/\r?\n(?=event:)/);
-        const completed = events.find((event) => /^event:\s*complete\s*$/m.test(event));
+        const events = stream.split(/\\r?\\n(?=event:)/);
+        const completed = events.find((event) => /^event:\\s*complete\\s*$/m.test(event));
         if (!completed) {
-          const errorEvent = events.find((event) => /^event:\s*error\s*$/m.test(event));
-          const dataLine = errorEvent?.split(/\r?\n/).find((line) => line.startsWith("data:"));
+          const errorEvent = events.find((event) => /^event:\\s*error\\s*$/m.test(event));
+          const dataLine = errorEvent?.split(/\\r?\\n/).find((line) => line.startsWith("data:"));
           const rawDetail = dataLine?.slice(5).trim() ?? "";
           let detail = "";
           if (rawDetail && rawDetail !== "null" && rawDetail !== "undefined") {
@@ -227,16 +226,15 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
           }
           throw new Error(detail || `Hugging Face returned no details for ${endpoint}. Raw response: ${stream.slice(0, 700)}`);
         }
-        const dataLine = completed.split(/\r?\n/).find((line) => line.startsWith("data:"));
+        const dataLine = completed.split(/\\r?\\n/).find((line) => line.startsWith("data:"));
         if (!dataLine) throw new Error(`Hugging Face returned an empty ${endpoint} result.`);
         return JSON.parse(dataLine.slice(5).trim()) as unknown;
       };
 
-      // The Space's generate_images function explicitly accepts active_mode
-      // as its first argument. Tab-select callbacks are UI events, not public
-      // API endpoints, so set the mode directly in this call.
+      // The live API docs expose this tab-selection endpoint and list exactly
+      // nine inputs for generation (no mode/state input).
+      await runSpaceEndpoint("on_select_i2i", []);
       const resultPayload = await runSpaceEndpoint("generate_images", [
-        "i2i",
         "",
         productPrompt,
         {
@@ -244,9 +242,12 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
           orig_name: "product-reference.png",
           size: reference.size,
           mime_type: "image/png",
+          is_stream: false,
           meta: { _type: "gradio.FileData" },
         },
         0.95,
+        "Photoreal / Fotorrealista",
+        "Square 1:1 / Cuadrado 1:1",
         4,
         4.0,
         Math.floor(Math.random() * 2_000_000_000),
