@@ -69,6 +69,19 @@ export async function saveAiKeyAction(_prev: KeyState, fd: FormData): Promise<Ke
   return { ok: true };
 }
 
+export async function saveOpenRouterFallbackKeyAction(_prev: KeyState, fd: FormData): Promise<KeyState> {
+  await requireUser();
+  await ensureDb();
+  const key = String(fd.get("openrouterFallbackKey") ?? "").trim();
+  if (key && (key.length < 16 || key.length > 500 || /\\s/.test(key))) {
+    return { error: "That does not look like a valid OpenRouter API key." };
+  }
+  if (!key) return { error: "Paste your OpenRouter API key first." };
+  await setSetting("openrouter_fallback_key", key);
+  refresh();
+  return { ok: true };
+}
+
 export async function saveOpenRouterVisionKeyAction(fd: FormData): Promise<void> {
   await requireUser();
   await ensureDb();
