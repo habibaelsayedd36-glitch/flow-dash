@@ -191,8 +191,11 @@ export async function cutout(file: Blob, strength: number): Promise<Cutout> {
   restoreEnclosedDetails(img, w, h);
   const d = img.data;
   const level = Math.max(0, Math.min(100, strength));
-  const low = 28 + level * 0.28;
-  const high = 245 - level * 0.12;
+  // Use a substantially firmer alpha cutoff: soft cast-shadow pixels often
+  // survive the model as mid-opacity matte, so a tiny threshold change is not
+  // enough. The transition remains antialiased for a clean product contour.
+  const low = 88 + level * 0.65;
+  const high = 232 - level * 0.08;
   for (let i = 0; i < d.length; i += 4) {
     const alpha = d[i + 3];
     if (alpha <= low) {
@@ -211,8 +214,8 @@ export async function cutout(file: Blob, strength: number): Promise<Cutout> {
       const g = d[i + 1];
       const b = d[i + 2];
       const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-      const saturate = (channel: number) => luma + (channel - luma) * 1.07;
-      const contrast = (channel: number) => Math.max(0, Math.min(255, (channel - 128) * 1.06 + 128));
+      const saturate = (channel: number) => luma + (channel - luma) * 1.14;
+      const contrast = (channel: number) => Math.max(0, Math.min(255, (channel - 128) * 1.13 + 128));
       d[i] = Math.round(contrast(saturate(r)));
       d[i + 1] = Math.round(contrast(saturate(g)));
       d[i + 2] = Math.round(contrast(saturate(b)));
