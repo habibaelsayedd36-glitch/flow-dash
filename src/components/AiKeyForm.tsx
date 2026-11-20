@@ -16,6 +16,9 @@ export function AiKeyForm({ providers, current, visionMasked, pixelAiMasked }: {
   const keyRef = useRef<HTMLInputElement>(null);
   const fromEnv = current?.source === "env";
   const selected = providers.find((p) => p.id === provider) ?? providers[0];
+  const providerHelp = selected.id === "gemini"
+    ? "Uses Google Gemini 2.5 Flash-Lite on the free tier for listing text. FLOW does not switch to paid Gemini models."
+    : "Uses OpenRouter free models only. Paid models are rejected and never used as fallbacks.";
 
   useEffect(() => {
     if (state.ok && keyRef.current) keyRef.current.value = "";
@@ -81,7 +84,7 @@ export function AiKeyForm({ providers, current, visionMasked, pixelAiMasked }: {
               aria-describedby="ai-key-help"
             />
             <p id="ai-key-help" className="mt-1.5 text-[13px] leading-relaxed text-mute">
-              Use an OpenRouter API key. FLOW only routes AI text and vision requests to free-tier models; free model availability and rate limits depend on your OpenRouter account. Paid models are rejected and never used as fallbacks.
+              {providerHelp}
             </p>
             {state.error && <p role="alert" className="mt-1.5 text-[13px] text-danger">{state.error}</p>}
             {state.ok && <p role="status" className="mt-1.5 text-[13px] text-forest">Saved. Run the test to confirm the key works.</p>}
