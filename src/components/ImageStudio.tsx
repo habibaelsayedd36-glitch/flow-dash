@@ -117,14 +117,14 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
     setFluxBusy((list) => [...list, shot.id]);
     setMessage("");
     try {
-      // Cloudflare's multi-reference endpoint requires each reference image to be smaller than 512x512.
+      // Hugging Face FLUX.2 Klein accepts product references up to 1024px on the longest side.
       const bitmap = await createImageBitmap(shot.file);
-      const scale = Math.min(511 / bitmap.width, 511 / bitmap.height, 1);
+      const scale = Math.min(1024 / bitmap.width, 1024 / bitmap.height, 1);
       const canvas = document.createElement("canvas");
       canvas.width = Math.max(1, Math.round(bitmap.width * scale));
       canvas.height = Math.max(1, Math.round(bitmap.height * scale));
       const context = canvas.getContext("2d");
-      if (!context) { bitmap.close(); throw new Error("Could not prepare the FLUX reference image."); }
+      if (!context) { bitmap.close(); throw new Error("Could not prepare the Hugging Face FLUX reference image."); }
       context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
       bitmap.close();
       const reference = await new Promise<Blob>((resolve, reject) =>
@@ -142,7 +142,7 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
       const preview = URL.createObjectURL(blob);
       if (shot.preview) URL.revokeObjectURL(shot.preview);
       patch(shot.id, { preview, aiBlob: blob });
-      setMessage("FLUX.2 Klein generated a new studio-style image. Check every label against the original before downloading.");
+      setMessage("Free Hugging Face FLUX.2 Klein generated a new studio-style image. Check every label against the original before downloading.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "FLUX image editing failed.");
     } finally {
@@ -434,8 +434,8 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
         <div>
           <h2 className="h-section">{mode === "cleanup" ? "Output" : "Product and marketplaces"}</h2>
           <p className="mt-1 text-[13px] leading-relaxed text-mute">
-            {mode === "cleanup" ? "Remove the background locally, or generate a studio-style edit with FLUX.2 Klein 4B. " : "Upload your real product photos, then clean and export them for marketplace image requirements. "}
-            Local background cleanup is automatic. FLUX.2 Klein 4B is available through your connected Cloudflare Workers AI account; AI editing runs only on click.
+            {mode === "cleanup" ? "Remove the background locally, or regenerate the product photo with FLUX.2 Klein 4B on Hugging Face ZeroGPU. " : "Upload your real product photos, then clean and export them for marketplace image requirements. "}
+            Local background cleanup is automatic. Free Hugging Face FLUX.2 Klein 4B runs only when you click Generate. GPU queue and cold starts may cause a wait. No Cloudflare account or paid fallback is used.
           </p>
         </div>
 
