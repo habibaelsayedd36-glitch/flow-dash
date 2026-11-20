@@ -333,12 +333,12 @@ export async function autoFixAllJobItemsAction(jobId: number): Promise<{ ok: boo
   if (!provider) return { ok: false, count: 0, error: "Connect your existing AI provider in Settings before running Auto-Fix." };
   // Re-run every completed listing through compliance correction and retry failed rows
   // that never received content (for example, after a temporary Gemini 503).
+  const count = job.items.filter((item) => item.status === "done" || item.status === "failed").length;
   const items = job.items.map((item) =>
     item.status === "done" || item.status === "failed"
       ? { ...item, status: "pending" as const, error: undefined }
       : item
   );
-  const count = items.filter((item) => item.status === "pending").length;
   if (!count) return { ok: false, count: 0, error: "There are no completed or failed rows to auto-fix." };
   await db.update(jobs).set({ items, status: "running" }).where(eq(jobs.id, jobId));
   refresh();
