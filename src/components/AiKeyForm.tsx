@@ -9,7 +9,7 @@ type Current = { id: string; label: string; model: string; masked: string; sourc
 
 export function AiKeyForm({ providers, current, visionMasked, pixelAiMasked, cloudflareAccountId = "", cloudflareTokenMasked = "" }: { providers: ProviderOpt[]; current: Current; visionMasked: string; pixelAiMasked: string; cloudflareAccountId?: string; cloudflareTokenMasked?: string }) {
   const [provider, setProvider] = useState(current?.id ?? providers[0].id);
-  const [state, action, saving] = useActionState<KeyState, FormData>(saveAiKeyAction, {});
+  const [state, action, saving] = useActionState<KeyState, FormData>(saveAiKeyAction, {});\n  const [fluxState, fluxAction, savingFlux] = useActionState<{ ok?: boolean; error?: string }, FormData>(saveCloudflareFluxKeyAction, {});
   const [test, setTest] = useState<{ ok: boolean; message: string } | null>(null);
   const [testing, setTesting] = useState(false);
   const [removing, startRemove] = useTransition();
@@ -134,11 +134,11 @@ export function AiKeyForm({ providers, current, visionMasked, pixelAiMasked, clo
           Connect Cloudflare Workers AI to generate a studio-style product image from the uploaded reference photo. The API token stays on the server. Cloudflare's free allocation is 10,000 Neurons per day; FLOW will not switch to paid usage.
           {cloudflareTokenMasked ? <> Saved token: <span className="num text-ink">{cloudflareTokenMasked}</span>.</> : " Not connected yet."}
         </p>
-        <form action={saveCloudflareFluxKeyAction} className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <form action={fluxAction} className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
           <input name="cloudflareAccountId" className="field min-w-0" defaultValue={cloudflareAccountId} placeholder="Cloudflare Account ID (32 characters)" autoComplete="off" spellCheck={false} />
           <input name="cloudflareFluxToken" type="password" className="field min-w-0" placeholder={cloudflareTokenMasked ? "Paste a new token to replace it" : "Cloudflare API token"} autoComplete="off" spellCheck={false} />
           <p className="text-[12px] leading-relaxed text-mute sm:col-span-2">Create a Cloudflare API token with Workers AI: Read and Workers AI: Run permissions. Leave the token field empty to keep the saved token.</p>
-          <div className="sm:col-span-2"><button type="submit" className="btn btn-secondary">Save Cloudflare connection</button></div>
+          <div className="sm:col-span-2 flex flex-wrap items-center gap-3"><button type="submit" className="btn btn-secondary" disabled={savingFlux}>{savingFlux ? <Loader2 size={15} className="animate-spin" aria-hidden /> : <KeyRound size={15} aria-hidden />}Save Cloudflare connection</button>{fluxState.error && <p role="alert" className="text-[13px] text-danger">{fluxState.error}</p>}{fluxState.ok && <p role="status" className="text-[13px] text-forest">Cloudflare credentials saved securely.</p>}</div>
         </form>
       </div>
 
