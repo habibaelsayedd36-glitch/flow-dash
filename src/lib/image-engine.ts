@@ -185,13 +185,27 @@ export async function cutout(file: Blob, strength: number): Promise<Cutout> {
   sourceBitmap.close();
   matteBitmap.close();
 
-  // Preserve the model's original alpha matte instead of hard-thresholding it.
-  // Aggressive alpha clipping creates jagged edges and removes fine details,
-  // translucent packaging and the product's natural contact shadow.
+  // Refine the AI matte gently: suppress faint background haze while keeping
+  // a smooth transition at the product edge. RGB remains the untouched source.
+  // The slider controls how firmly faint edge residue is removed.
   const img = ctx.getImageData(0, 0, w, h);
   restoreEnclosedDetails(img, w, h);
-  ctx.putImageData(img, 0, 0);
   const d = img.data;
+  const low = 5 + Math.max(0, Math.min(100, strength)) * 0.20;
+  const high = 252 - Math.max(0, Math.min(100, strength)) * 0.22;
+  for (let i = 0; i < d.length; i += 4) {
+    const alpha = d[i + 3];
+    if (alpha <= low) {
+      d[i + 3] = 0;
+    } else if (alpha >= high) {
+      d[i + 3] = 255;
+    } else {
+      const t = (alpha - low) / (high - low);
+      // Smoothstep keeps antialiased edges soft instead of making them jagged.
+      d[i + 3] = Math.round((t * t * (3 - 2 * t)) * 255);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
   let minX = w;
   let minY = h;
   let maxX = -1;
