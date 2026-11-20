@@ -744,7 +744,7 @@ async function researchProductBrief(provider: AiProvider, brief: ProductBrief): 
           "user-agent": "Mozilla/5.0 (compatible; FLOWProductResearch/1.0)",
           accept: "text/html,application/xhtml+xml",
         },
-        signal: AbortSignal.timeout(18_000),
+        signal: AbortSignal.timeout(9_000),
         cache: "no-store",
       });
       if (!response.ok) throw new Error("Direct product page unavailable");
