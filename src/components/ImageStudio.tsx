@@ -220,9 +220,9 @@ export function ImageStudio({ mode }: { mode: "cleanup" | "shots" }) {
       }
       const stream = await resultResponse.text();
       const events = stream.split(/\n(?=event:)/);
-      const completed = events.find((event) => /^event: complete\\s*$/m.test(event));
+      const completed = events.find((event) => /^event: complete\s*$/m.test(event));
       if (!completed) {
-        const errorEvent = events.find((event) => /^event: error\\s*$/m.test(event));
+        const errorEvent = events.find((event) => /^event: error\s*$/m.test(event));
         const detail = errorEvent?.split("\n").find((line) => line.startsWith("data:"))?.slice(5).trim();
         throw new Error(detail || "The free Hugging Face Space did not complete the image job. It may be busy; please retry.");
       }
