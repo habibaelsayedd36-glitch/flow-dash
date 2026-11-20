@@ -857,31 +857,24 @@ export async function generateJobItem(
   const knownText = Object.entries(known)
     .map(([k, v]) => `- ${k}: ${v}`)
     .join("\n");
-  const estimateKeys = missing.filter((k) => k === "size" || k === "weight" || k === "dimensions");
+  // Batch generation must finish within the hosting function's time limit.
+  // Do not run a separate web-research round trip for every row or estimate
+  // unprovided measurements. Use only facts supplied in the sheet.
+  const estimateKeys: SpecKey[] = [];
   const tail = `Confirmed specifications from the receiving sheet (facts — you may use them in the copy):
 ${knownText || "(none)"}
 
-Also return a "specs" object ONLY for these estimate-eligible fields: ${estimateKeys.join(", ") || "(none)"}.
-- Estimate size, weight and dimensions only when the exact product type/model and available evidence support a reasonable approximate value.
-- Prefer exact manufacturer or retailer values when found in readable source text. Otherwise mark a defensible estimate with "~" (for example "~350 g" or "~20 x 10 x 5 cm").
-- Give weight with a unit and dimensions as L x W x H with a unit. Never invent precise measurements.
-- Do NOT estimate colour, material or country of origin. Leave those fields blank unless the receiving sheet supplied an explicit value. Country of origin is accepted only as a verified "Made in" fact.
-- Keep all estimated specifications out of the title, bullets and description.
-- Return empty strings when a size, weight or dimension cannot be reasonably estimated.
+Do not estimate missing specifications. Return a "specs" object with no guessed values.
+Keep every unconfirmed specification out of the title, bullets and description.
 
 Return exactly this JSON shape:
-{${LISTING_SHAPE},"specs":{${estimateKeys.map((k) => `"${k}":""`).join(",")}}}`;
-  // Research every row with missing specifications, even when the sheet
-  // already contains one or more features. Merge verified source excerpts
-  // with user-entered facts so the model can fill more fields from evidence.
-  let researchedBrief = brief;
-  if (missing.length > 0) {
-    const research = await researchProductBrief(p, brief);
-    researchedBrief = research.brief;
-  }
-  if (!researchedBrief.features.trim() && !researchedBrief.featuresAr.trim()) {
-    throw new Error("Add a product name or at least one confirmed product detail before generating this row.");
-  }
+{${LISTING_SHAPE},"specs":{}}`;
+  const researchedBrief: ProductBrief = {
+    ...brief,
+    nameAr: brief.nameAr.trim() || brief.name,
+    features: brief.features.trim() || `Product identity supplied in the receiving sheet: ${brief.name}`,
+    featuresAr: brief.featuresAr.trim() || brief.nameAr.trim() || brief.name,
+  };
   const raw = await callListingJson(p, SYSTEM, userPrompt(researchedBrief, m, tone, correctionNotes, tail));
   const initialContent = toListing(raw, m);
   const content = await repairShortBullets(p, researchedBrief, m, initialContent, tail);
