@@ -11,12 +11,13 @@ import { RULES, type ListingContent, type ProductBrief } from "./rules";
  * and callers fall back to the template engine — nothing here fabricates output.
  */
 
-export type ProviderId = "gemini" | "openrouter";
+export type ProviderId = "gemini" | "openrouter" | "groq";
 export type AiProvider = { id: ProviderId; label: string; model: string; key: string; source: "env" | "settings" };
 
 export const PROVIDERS: Record<ProviderId, { label: string; defaultModel: string }> = {
   gemini: { label: "Google Gemini Free", defaultModel: "gemini-3.5-flash-lite" },
   openrouter: { label: "OpenRouter Free", defaultModel: "nvidia/nemotron-3.5-lightning:free" },
+  groq: { label: "Groq Free", defaultModel: "openai/gpt-oss-20b" },
 };
 export const isProviderId = (v: unknown): v is ProviderId => typeof v === "string" && v in PROVIDERS;
 
@@ -24,6 +25,15 @@ export async function getOpenRouterFallbackKey(): Promise<string> {
   try {
     const rows = await db.select().from(settings).where(inArray(settings.key, ["openrouter_fallback_key"]));
     return rows.find((row) => row.key === "openrouter_fallback_key")?.value.trim() ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export async function getGroqFallbackKey(): Promise<string> {
+  try {
+    const rows = await db.select().from(settings).where(inArray(settings.key, ["groq_fallback_key"]));
+    return rows.find((row) => row.key === "groq_fallback_key")?.value.trim() ?? "";
   } catch {
     return "";
   }
@@ -72,6 +82,7 @@ export async function getAiProvider(): Promise<AiProvider | null> {
     const id = get("ai_provider");
     const key = get("ai_key");
     if (id === "gemini" && key) return { id: "gemini", label: PROVIDERS.gemini.label, model: PROVIDERS.gemini.defaultModel, key, source: "settings" };
+    if (id === "groq" && key) return { id: "groq", label: PROVIDERS.groq.label, model: PROVIDERS.groq.defaultModel, key, source: "settings" };
     if (id === "openrouter" && key) {
       const savedModel = get("ai_model");
       const model = savedModel && (savedModel.endsWith(":free") || savedModel === "openrouter/free")
@@ -426,6 +437,26 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
       `Google Gemini models are temporarily unavailable after automatic retries. FLOW tried ${models.join(" and ")}; no paid model was used. Please retry in a few minutes. ${lastError?.message || ""}`,
     );
   }
+  if (p.id === "groq") {
+    const data = await post(
+      "https://api.groq.com/openai/v1/chat/completions",
+      { authorization: `Bearer ${p.key}` },
+      {
+        model: p.model || PROVIDERS.groq.defaultModel,
+        max_tokens: 4000,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+        ...(json ? { response_format: { type: "json_object" } } : {}),
+      },
+      "Groq Free",
+    ) as { choices?: { message?: { content?: unknown } }[] };
+    const content = data?.choices?.[0]?.message?.content;
+    const result = typeof content === "string" ? content.trim() : "";
+    if (!result) throw new Error("Groq Free returned an empty response.");
+    return result;
+  }
   const requestChat = (model: string) => post(
     "https://openrouter.ai/api/v1/chat/completions",
     {
@@ -486,7 +517,22 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
     }
   }
   const detail = lastError instanceof Error ? lastError.message : String(lastError ?? "");
-  throw new Error(`All configured OpenRouter free models are unavailable or rate-limited. FLOW did not switch to a paid model. Try again later. ${detail}`);
+  const groqKey = await getGroqFallbackKey();
+  if (groqKey) {
+    try {
+      return await callModel({
+        id: "groq",
+        label: PROVIDERS.groq.label,
+        model: PROVIDERS.groq.defaultModel,
+        key: groqKey,
+        source: "settings",
+      }, system, user, json);
+    } catch (groqError) {
+      const groqMessage = groqError instanceof Error ? groqError.message : String(groqError);
+      throw new Error(`OpenRouter free quota is unavailable, and Groq fallback also failed. No paid model was used. ${detail} | ${groqMessage}`);
+    }
+  }
+  throw new Error(`All configured OpenRouter free models are unavailable or rate-limited. FLOW did not switch to a paid model. Connect a Groq free key in Settings or retry after quota reset. ${detail}`);
 }
 
 /** A real round-trip, used by "Test connection" on the Settings page. */
