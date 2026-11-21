@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Download, FileSpreadsheet, Loader2, PackagePlus, TriangleAlert } from "lucide-react";
+import { Check, Download, FileSpreadsheet, Loader2, PackagePlus, TriangleAlert, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { autoFixAllJobItemsAction, finishJobAction, importJobAction, processJobItemAction, pauseJobAction, retryFailedJobItemsAction, verifyJobItemAction, markJobItemFailedAction } from "@/app/actions-tools";
@@ -20,7 +20,7 @@ type Item = {
   error: string | null;
 };
 
-export function JobRunner({ jobId, items, hasClient, clientName, imported, status }: { jobId: number; items: Item[]; hasClient: boolean; clientName: string | null; imported: boolean; status: string }) {
+export function JobRunner({ jobId, items, hasClient, clientName, imported, status, hasTemplate }: { jobId: number; items: Item[]; hasClient: boolean; clientName: string | null; imported: boolean; status: string; hasTemplate: boolean }) {
   const router = useRouter();
   const pending = items.filter((i) => i.status === "pending");
   const [processed, setProcessed] = useState(0);
@@ -28,7 +28,7 @@ export function JobRunner({ jobId, items, hasClient, clientName, imported, statu
   const [includeEstimates, setIncludeEstimates] = useState(false);
   const [busy, setBusy] = useState<"" | "import" | "autofix" | number>("");
   const [notice, setNotice] = useState("");
-  const [workerError, setWorkerError] = useState("");
+  const [workerError, setWorkerError] = useState("");\n  const [templateBusy, setTemplateBusy] = useState(false);\n  const [templateNotice, setTemplateNotice] = useState("");
   const started = useRef(false);
   const pauseRequested = useRef(false);
   const [pausing, setPausing] = useState(false);
@@ -97,6 +97,28 @@ export function JobRunner({ jobId, items, hasClient, clientName, imported, statu
   const scores = done.map((i) => i.score ?? 0);
   const avg = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
   const aiCount = done.filter((i) => i.engine === "ai").length;
+  const attachTemplate = async (file: File | undefined) => {
+    if (!file) return;
+    setTemplateBusy(true);
+    setTemplateNotice("");
+    const body = new FormData();
+    body.set("file", file);
+    body.set("kind", "template");
+    body.set("jobId", String(jobId));
+    try {
+      const response = await fetch("/api/jobs/upload", { method: "POST", body });
+      const result = await response.json();
+      if (!result.ok) setTemplateNotice(result.error ?? "Could not attach the Seller Central template.");
+      else {
+        setTemplateNotice(`Seller Central template attached (${result.fields} fields). Flat file exports will use its column layout.`);
+        router.refresh();
+      }
+    } catch {
+      setTemplateNotice("Template upload failed. Check your connection and try again.");
+    } finally {
+      setTemplateBusy(false);
+    }
+  };
   const flat = (lang: string) => `/api/jobs/${jobId}/download?file=flat&lang=${lang}${includeEstimates ? "&estimates=1" : ""}`;
 
   const verify = async (index: number) => {
@@ -175,7 +197,7 @@ export function JobRunner({ jobId, items, hasClient, clientName, imported, statu
             <FileSpreadsheet size={16} aria-hidden />
             Collecting sheet (.xlsx)
           </a>
-          <a href={flat("en")} className="btn btn-ghost">
+          <a href={`/api/jobs/${jobId}/download?file=csv`} className="btn btn-ghost">\n            <Download size={16} aria-hidden />\n            Collecting sheet (.csv)\n          </a>\n          <a href={flat("en")} className="btn btn-ghost">
             <Download size={16} aria-hidden />
             Amazon flat file · English
           </a>
@@ -190,6 +212,15 @@ export function JobRunner({ jobId, items, hasClient, clientName, imported, statu
               {imported ? "Added to pipeline" : "Add to pipeline"}
             </button>
           )}
+        </div>
+        <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-line pt-4">
+          <label className="btn btn-ghost cursor-pointer">
+            {templateBusy ? <Loader2 size={15} className="animate-spin" aria-hidden /> : <Upload size={15} aria-hidden />}
+            {hasTemplate ? "Replace Seller Central template" : "Attach Seller Central template"}
+            <input type="file" accept=".xlsx,.xlsm,.csv,.txt,.tsv" className="sr-only" disabled={templateBusy} onChange={(e) => attachTemplate(e.target.files?.[0])} />
+          </label>
+          {hasTemplate && <span className="pill pill-ok">Seller template attached</span>}
+          {templateNotice && <p role="status" className="w-full text-sm text-mute">{templateNotice}</p>}
         </div>
         <label className="mt-4 flex cursor-pointer items-start gap-2.5 text-sm text-ink">
           <input type="checkbox" className="mt-1 size-4 shrink-0 accent-flow-green" checked={includeEstimates} onChange={(e) => setIncludeEstimates(e.target.checked)} />
