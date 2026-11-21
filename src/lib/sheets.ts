@@ -155,7 +155,7 @@ export function buildCollectingCsv(job: Job): string {
   ];
   const quote = (value: unknown) => {
     const raw = String(value ?? "");
-    return /[",\\r\\n]/.test(raw) ? `"${raw.replace(/"/g, '""')}"` : raw;
+    return /[",\r\n]/.test(raw) ? `"${raw.replace(/"/g, '""')}"` : raw;
   };
   const rows = [head];
   for (const item of job.items) {
@@ -171,7 +171,7 @@ export function buildCollectingCsv(job: Job): string {
       flagSummary(item).join(" · "),
     ]);
   }
-  return "\\uFEFF" + rows.map((row) => row.map(quote).join(",")).join("\\r\\n") + "\\r\\n";
+  return "\uFEFF" + rows.map((row) => row.map(quote).join(",")).join("\r\n") + "\r\n";
 }
 
 // ---------------------------------------------------------------------------
