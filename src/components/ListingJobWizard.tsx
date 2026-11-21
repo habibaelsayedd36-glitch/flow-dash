@@ -55,7 +55,6 @@ export function ListingJobWizard({ clients }: { clients: { id: number; name: str
   const start = async () => {
     if (!parsed) return;
     if (mapping.name === undefined) return setError("Choose the English product-name column.");
-    if (mapping.brand === undefined) return setError("Choose the brand column.");
     if (!opts.clientId) return setError("Choose the client for this batch.");
     setError("");
     setBusy("start");
@@ -78,7 +77,7 @@ export function ListingJobWizard({ clients }: { clients: { id: number; name: str
       <section className="card p-6 sm:p-8" aria-labelledby="up">
         <h2 id="up" className="h-section">1. Upload the product sheet</h2>
         <p className="mt-1 text-sm text-mute">
-          Excel (.xlsx) or CSV, one product per row, up to 1,000 products per batch. The sheet needs only two columns: Product Name (English) and Brand.
+          Excel (.xlsx) or CSV, one product per row, up to 1,000 products per batch. The sheet needs only one required column: Product Name (English). Brand is optional; leave it blank for Generic / unbranded products.
         </p>
         <label className="mt-5 flex cursor-pointer flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-input bg-sage-soft px-6 py-12 text-center transition-colors hover:border-moss focus-within:border-moss">
           <span className="grid size-12 place-items-center rounded-full bg-white text-moss">
@@ -103,7 +102,7 @@ export function ListingJobWizard({ clients }: { clients: { id: number; name: str
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 id="map" className="h-section">2. Map your product fields</h2>
-            <p className="mt-1 text-sm text-mute">Map SKU and any available product details. Name and Brand are required; other fields are optional and help FLOW avoid guessing.</p>
+            <p className="mt-1 text-sm text-mute">Map the product name and any available details. Brand is optional — leave it unmapped or blank for Generic / unbranded products.</p>
           </div>
           <span className="pill pill-mute !h-8 !px-3">
             <FileSpreadsheet size={14} aria-hidden />
@@ -117,7 +116,7 @@ export function ListingJobWizard({ clients }: { clients: { id: number; name: str
             const example = col !== undefined ? parsed.preview.map((row) => row[col]).find(Boolean) : undefined;
             return (
               <li key={field.key} className="min-w-0">
-                <label className="label" htmlFor={`map-${field.key}`}>{field.label}</label>
+                <label className="label" htmlFor={`map-${field.key}`}>{field.key === "brand" ? "Brand (optional)" : field.label}</label>
                 <select
                   id={`map-${field.key}`}
                   className="field"
@@ -127,7 +126,7 @@ export function ListingJobWizard({ clients }: { clients: { id: number; name: str
                   <option value="">Choose a column</option>
                   {parsed.headers.map((header, index) => <option key={index} value={index}>{header}</option>)}
                 </select>
-                <p className="mt-1 truncate text-xs text-mute" dir="auto">{example ? `Example: ${example}` : "Required column"}</p>
+                <p className="mt-1 truncate text-xs text-mute" dir="auto">{example ? `Example: ${example}` : field.key === "name" ? "Required column" : field.key === "brand" ? "Optional — blank means Generic / unbranded" : "Optional column"}</p>
               </li>
             );
           })}
@@ -152,7 +151,7 @@ export function ListingJobWizard({ clients }: { clients: { id: number; name: str
           </div>
         </div>
         <p className="mt-4 rounded-xl bg-sage-soft p-4 text-sm leading-relaxed text-mute">
-          FLOW will preserve your SKU (or create one if missing), research each product, and write the English and Arabic listing. Size, weight and dimensions may be shown as estimates; colour, material and country of origin stay blank unless you provide verified values.
+          FLOW will preserve your SKU (or create one if missing), use Generic for unbranded products in the Amazon flat file, and write the English and Arabic listing. Size, weight and dimensions may be shown as estimates; colour, material and country of origin stay blank unless you provide verified values.
         </p>
         {error && <p role="alert" className="mt-4 text-sm text-danger">{error}</p>}
         <div className="mt-5 flex flex-wrap items-center gap-3">
