@@ -167,7 +167,7 @@ export function buildCollectingCsv(job: Job): string {
       c?.titleEn ?? "", c?.titleAr ?? "", ...b(c?.bulletsEn), ...b(c?.bulletsAr),
       c?.descriptionEn ?? "", c?.descriptionAr ?? "", c?.searchTerms ?? "",
       ...SPEC_COLS.map(([key]) => item.specs?.[key] ?? ""),
-      item.score ?? "", item.status === "failed" ? `FAILED: ${item.error ?? ""}` : item.engine === "ai" ? "AI" : "Template engine",
+      String(item.score ?? ""), item.status === "failed" ? `FAILED: ${item.error ?? ""}` : item.engine === "ai" ? "AI" : "Template engine",
       flagSummary(item).join(" · "),
     ]);
   }
