@@ -349,6 +349,20 @@ export async function autoFixAllJobItemsAction(jobId: number): Promise<{ ok: boo
   refresh();
   return { ok: true, count };
 }
+export async function markJobItemFailedAction(jobId: number, index: number, errorMessage: string): Promise<{ ok: boolean }> {
+  await requireUser();
+  await ensureDb();
+  const [job] = await db.select().from(jobs).where(eq(jobs.id, jobId));
+  const item = job?.items[index];
+  if (!job || !item || item.status !== "pending" || job.imported) return { ok: false };
+  await writeItem(jobId, index, {
+    source: item.source,
+    status: "failed",
+    error: String(errorMessage || "Temporary server error after automatic retries. Retry this row when the service recovers.").slice(0, 500),
+  });
+  return { ok: true };
+}
+
 export async function retryFailedJobItemsAction(jobId: number): Promise<{ ok: boolean; count: number }> {
   await requireUser();
   await ensureDb();
