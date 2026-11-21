@@ -3,7 +3,7 @@
 import { Check, Download, FileSpreadsheet, Loader2, PackagePlus, TriangleAlert } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { autoFixAllJobItemsAction, finishJobAction, importJobAction, processJobItemAction, pauseJobAction, retryFailedJobItemsAction, verifyJobItemAction } from "@/app/actions-tools";
+import { autoFixAllJobItemsAction, finishJobAction, importJobAction, processJobItemAction, pauseJobAction, retryFailedJobItemsAction, verifyJobItemAction, markJobItemFailedAction } from "@/app/actions-tools";
 import { ScoreBadge } from "./ui";
 
 type Item = {
@@ -44,13 +44,29 @@ export function JobRunner({ jobId, items, hasClient, clientName, imported, statu
       while (!cancelled && !pauseRequested.current && queue.length > 0) {
         const index = queue.shift();
         if (index === undefined) return;
-        try {
-          const result = await processJobItemAction(jobId, index);
-          if (result.pause) cancelled = true;
-        } catch (error) {
-          const message = error instanceof Error ? error.message : "The listing request failed unexpectedly.";
-          setWorkerError(message);
-          cancelled = true;
+        let completed = false;
+        let lastError = "";
+        // A single failed server-action request must not abandon every later SKU.
+        // Retry this row twice, then save it as failed and keep processing the queue.
+        for (let attempt = 0; attempt < 3 && !cancelled; attempt++) {
+          try {
+            const result = await processJobItemAction(jobId, index);
+            if (result.pause) cancelled = true;
+            completed = true;
+            break;
+          } catch (error) {
+            lastError = error instanceof Error ? error.message : "The listing request failed unexpectedly.";
+            if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 2000 * (attempt + 1)));
+          }
+        }
+        if (!completed && !cancelled) {
+          setWorkerError(lastError || "The listing request failed after automatic retries.");
+          try {
+            await markJobItemFailedAction(jobId, index, lastError);
+          } catch {
+            // If the database is unreachable too, stop safely; the pending row is preserved.
+            cancelled = true;
+          }
         }
         setProcessed((n) => n + 1);
       }
