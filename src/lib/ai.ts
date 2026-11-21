@@ -93,7 +93,8 @@ const SYSTEM = `You are FLOW Agency's senior marketplace SEO strategist and conv
 Your goal is to help the right shopper find the exact product, understand its real value quickly, and feel confident buying it. Write specific, useful product copy — never generic filler.
 
 PRODUCT ANALYSIS:
-- Read the complete brief, including product names in both languages, brand, category, every feature, every confirmed specification and target keyword.
+- Read the complete brief, including product names in both languages, brand (if supplied), category, every feature, every confirmed specification and target keyword.
+- If the brand field is blank, the product is GENERIC / UNBRANDED. Do not invent a brand, infer one from the product name, or write "Generic" as a brand in shopper-facing titles or descriptions. Describe the product by its product type and confirmed attributes only.
 - Identify the product type, intended use, strongest differentiators, and the most useful customer benefits that logically follow from the supplied facts.
 - Adapt vocabulary and selling angles to the actual category. Beauty copy should not sound like electronics copy; home products should not sound like fashion copy.
 - Treat every supplied specification as a confirmed fact. Do not omit useful supplied details merely to make the copy shorter.
@@ -101,7 +102,7 @@ PRODUCT ANALYSIS:
 
 TITLE:
 - Write a precise, descriptive, search-friendly title, not a short generic label.
-- Prioritize exact product identity, brand where marketplace rules allow, primary search phrase, and the most useful confirmed attributes (such as model, size, quantity, color, material or compatibility).
+- Prioritize exact product identity, the supplied brand only when one exists and marketplace rules allow it, primary search phrase, and the most useful confirmed attributes (such as model, size, quantity, color, material or compatibility).
 - Use natural keyword placement near the beginning. Avoid repetition and keyword stuffing.
 - Use the available character budget intelligently; aim for a complete shopper-readable title rather than stopping after the product name.
 
@@ -155,14 +156,15 @@ const TONES: Record<string, string> = {
   friendly: "Warm and friendly, like a helpful shop assistant. Still factual.",
 };
 
-function rulesText(m: Marketplace): string {
+function rulesText(m: Marketplace, hasBrand: boolean): string {
   const r = RULES[m];
-  const brand =
-    r.brand === "start"
-      ? "The English title must start with the brand name."
+  const brand = !hasBrand
+    ? "This product has no brand (GENERIC / UNBRANDED). Do not invent or add a brand name; start the title with the product type or primary search phrase."
+    : r.brand === "start"
+      ? "The English title must start with the supplied brand name."
       : r.brand === "forbidden"
-        ? "The title must NOT contain the brand name (the marketplace adds it from the brand field)."
-        : "The brand name may appear once in the title.";
+        ? "The title must NOT contain the supplied brand name (the marketplace adds it from the brand field)."
+        : "The supplied brand name may appear once in the title.";
   const terms =
     r.terms?.kind === "bytes"
       ? `searchTerms: hidden keywords, at most ${r.terms.max} BYTES (Arabic letters cost 2 bytes each). Lowercase, space separated, no commas, no brand name, no word that is already in the title.`
@@ -189,12 +191,12 @@ function userPrompt(p: ProductBrief, m: Marketplace, tone: string, notes: string
   return `Marketplace: ${MARKETPLACE_META[m].label}
 
 Rules for this marketplace:
-${rulesText(m)}
+${rulesText(m, Boolean(p.brand.trim()))}
 
 Tone: ${TONES[tone] ?? TONES.clear}
 
 Product brief:
-- Brand: ${p.brand || "(none)"}
+- Brand: ${p.brand.trim() || "GENERIC / UNBRANDED — no brand exists; do not invent or add one"}
 - Product name (English): ${p.name}
 - Product name (Arabic): ${p.nameAr || "(not provided — write it)"}
 - Category: ${p.category === "auto" ? "Infer only what is clear from the product name and supplied facts; if unclear, use a broad category and do not guess." : p.category}
