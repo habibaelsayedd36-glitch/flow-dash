@@ -32,6 +32,7 @@ const ISSUE_LABELS: Record<string, string> = {
   keywords_cov: "Target keywords have weak coverage",
   keyword_front: "Primary keyword is not near the start of the title",
   search_terms_empty: "Search terms are missing",
+  keyword_brief_missing: "Product keyword brief and listing search terms are both empty",
 };
 
 export default async function ListingAuditPage() {
