@@ -448,20 +448,36 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
     );
   }
   if (p.id === "groq") {
-    const data = await post(
-      "https://api.groq.com/openai/v1/chat/completions",
-      { authorization: `Bearer ${p.key}` },
+    const endpoint = "https://api.groq.com/openai/v1/chat/completions";
+    const headers = { authorization: `Bearer ${p.key}` };
+    const messages = [
+      { role: "system", content: system },
+      { role: "user", content: user },
+    ];
+    const request = (useJsonMode: boolean) => post(
+      endpoint,
+      headers,
       {
         model: p.model || PROVIDERS.groq.defaultModel,
         max_tokens: 4000,
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: user },
-        ],
-        ...(json ? { response_format: { type: "json_object" } } : {}),
+        messages,
+        ...(json && useJsonMode ? { response_format: { type: "json_object" } } : {}),
       },
       "Groq Free",
-    ) as { choices?: { message?: { content?: unknown } }[] };
+    ) as Promise<{ choices?: { message?: { content?: unknown } }[] }>;
+
+    let data: { choices?: { message?: { content?: unknown } }[] };
+    try {
+      data = await request(true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      // Groq's constrained JSON decoder can reject otherwise valid prompts
+      // with "Failed to generate JSON". Retry once in ordinary text mode;
+      // the system prompt still requires a single valid JSON object, and the
+      // listing parser/repair step validates the result before saving it.
+      if (!json || !/failed to generate json|json mode|response_format/i.test(message)) throw error;
+      data = await request(false);
+    }
     const content = data?.choices?.[0]?.message?.content;
     const result = typeof content === "string" ? content.trim() : "";
     if (!result) throw new Error("Groq Free returned an empty response.");
