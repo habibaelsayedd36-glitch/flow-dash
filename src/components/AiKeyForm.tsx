@@ -11,7 +11,8 @@ export function AiKeyForm({ providers, current, visionMasked, fallbackMasked, gr
   const [provider, setProvider] = useState(current?.id ?? providers[0].id);
   const [state, action, saving] = useActionState<KeyState, FormData>(saveAiKeyAction, {});
   const [fluxState, fluxAction, savingFlux] = useActionState<{ ok?: boolean; error?: string }, FormData>(saveCloudflareFluxKeyAction, {});
-  const [fallbackState, fallbackAction, savingFallback] = useActionState<KeyState, FormData>(saveOpenRouterFallbackKeyAction, {});\n  const [groqState, groqAction, savingGroq] = useActionState<KeyState, FormData>(saveGroqFallbackKeyAction, {});
+  const [fallbackState, fallbackAction, savingFallback] = useActionState<KeyState, FormData>(saveOpenRouterFallbackKeyAction, {});
+  const [groqState, groqAction, savingGroq] = useActionState<KeyState, FormData>(saveGroqFallbackKeyAction, {});
   const [test, setTest] = useState<{ ok: boolean; message: string } | null>(null);
   const [testing, setTesting] = useState(false);
   const [removing, startRemove] = useTransition();
