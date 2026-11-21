@@ -59,7 +59,7 @@ export default async function ListingAuditPage() {
       searchTerms: listing.searchTerms,
     };
     const checks = checkListing(content, marketplace, { brand: product.brand, keywords: product.keywords });
-    const issues = checks.filter((check) => !check.pass).map((check) => ({
+    const issues: Array<{ id: string; label: string; severity: "error" | "warn"; detail: string }> = checks.filter((check) => !check.pass).map((check) => ({
       id: check.id,
       label: ISSUE_LABELS[check.id] ?? check.id,
       severity: check.severity,
