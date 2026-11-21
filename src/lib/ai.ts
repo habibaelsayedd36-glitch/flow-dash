@@ -129,10 +129,12 @@ ARABIC AND ENGLISH:
 - Keep the meaning and order of the five Arabic bullets aligned with the English bullets.
 - Preserve brand names and model numbers accurately.
 
-SEARCH TERMS:
-- Prioritize relevant buyer-intent phrases, synonyms, alternate names and specific product attributes.
-- Do not waste space repeating title words, brand names, irrelevant traffic terms or competitors.
-- Follow the marketplace's exact byte, character and formatting limits.
+SEARCH TERMS / KEYWORDS:
+- Return exactly FIVE keyword phrases for this product, not more and not fewer.
+- Put English and its natural Arabic equivalent together for each keyword pair in the SAME searchTerms field.
+- Exact format: "English phrase — العبارة العربية | English phrase — العبارة العربية | English phrase — العبارة العربية | English phrase — العبارة العربية | English phrase — العبارة العربية".
+- Use five distinct, high-intent shopper search phrases based only on the product name and confirmed facts. Include useful synonyms and alternate ways shoppers search; avoid duplicates, irrelevant traffic, competitor names and unsupported claims.
+- Keep each phrase concise. For Amazon, keep the complete bilingual field within 249 UTF-8 bytes where possible; prioritize the five concise bilingual pairs and do not add commentary.
 
 FACTUAL AND POLICY SAFETY:
 - Use ONLY information supported by the brief. Never invent materials, dimensions, ingredients, certifications, warranty, compatibility, country of origin, medical effects, safety claims, performance results or included accessories.
@@ -166,11 +168,7 @@ function rulesText(m: Marketplace, hasBrand: boolean): string {
         ? "The title must NOT contain the supplied brand name (the marketplace adds it from the brand field)."
         : "The supplied brand name may appear once in the title.";
   const terms =
-    r.terms?.kind === "bytes"
-      ? `searchTerms: hidden keywords, at most ${r.terms.max} BYTES (Arabic letters cost 2 bytes each). Lowercase, space separated, no commas, no brand name, no word that is already in the title.`
-      : r.terms?.kind === "tags"
-        ? "searchTerms: 8 to 12 comma-separated product tags."
-        : "searchTerms: empty string (this marketplace has no hidden keyword field, so put the target keywords in the visible copy).";
+    "searchTerms: exactly five distinct bilingual keyword pairs in one string; each English phrase followed by its natural Arabic equivalent, with pairs separated by |. Keep phrases concise and relevant; never leave this field empty.";
   return [
     `Title: ${Math.max(r.titleMin, 1)} to ${r.titleMax} characters per language${r.titleSoft < r.titleMax ? `, aim for ${r.titleSoft} or fewer` : ""}. Put the main keyword within the first 80 characters. Title case in English.`,
     brand,
