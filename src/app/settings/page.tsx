@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import { AiKeyForm } from "@/components/AiKeyForm";
 import { DeleteAllDataButton } from "@/components/DeleteAllDataButton";
 import { PageHeader } from "@/components/ui";
-import { PROVIDERS, getAiProvider, getOpenRouterVisionKey, getOpenRouterFallbackKey, getPixelAiKey, getCloudflareFluxConfig, maskKey, type ProviderId } from "@/lib/ai";
+import { PROVIDERS, getAiProvider, getOpenRouterVisionKey, getOpenRouterFallbackKey, getGroqFallbackKey, getPixelAiKey, getCloudflareFluxConfig, maskKey, type ProviderId } from "@/lib/ai";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Settings & AI Key" };
@@ -20,7 +20,7 @@ const SAMPLE = `{
 }`;
 
 export default async function SettingsPage() {
-  const [provider, visionKey, fallbackKey, pixelAiKey, fluxConfig, h] = await Promise.all([getAiProvider(), getOpenRouterVisionKey(), getOpenRouterFallbackKey(), getPixelAiKey(), getCloudflareFluxConfig(), headers()]);
+  const [provider, visionKey, fallbackKey, groqFallbackKey, pixelAiKey, fluxConfig, h] = await Promise.all([getAiProvider(), getOpenRouterVisionKey(), getOpenRouterFallbackKey(), getGroqFallbackKey(), getPixelAiKey(), getCloudflareFluxConfig(), headers()]);
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "your-dashboard-address";
   const endpoint = `${h.get("x-forwarded-proto") ?? "https"}://${host}/api/leads`;
   const code = "mt-1.5 overflow-x-auto rounded-xl bg-flow-bg-soft px-4 py-3 font-mono text-[13px] leading-relaxed text-foreground";
@@ -35,7 +35,7 @@ export default async function SettingsPage() {
             providers={(Object.keys(PROVIDERS) as ProviderId[]).map((id) => ({ id, label: PROVIDERS[id].label, defaultModel: PROVIDERS[id].defaultModel }))}
             current={provider ? { id: provider.id, label: provider.label, model: provider.model, masked: maskKey(provider.key), source: provider.source } : null}
             visionMasked={visionKey ? maskKey(visionKey) : ""}
-            fallbackMasked={fallbackKey ? maskKey(fallbackKey) : ""}
+            fallbackMasked={fallbackKey ? maskKey(fallbackKey) : ""}\n            groqFallbackMasked={groqFallbackKey ? maskKey(groqFallbackKey) : ""}
             pixelAiMasked={pixelAiKey ? maskKey(pixelAiKey) : ""}
             cloudflareAccountId={fluxConfig.accountId}
             cloudflareTokenMasked={fluxConfig.token ? maskKey(fluxConfig.token) : ""}
