@@ -1,24 +1,14 @@
 "use client";
 
 import {
-  Boxes,
   BrainCircuit,
-  Camera,
-  Eraser,
   FileSpreadsheet,
   FileText,
   Inbox,
-  Kanban,
   LayoutDashboard,
-  Megaphone,
   Menu,
-  Package,
   Settings,
-  ShoppingBag,
-  Star,
-  TrendingUp,
   Users,
-  Workflow,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -47,28 +37,18 @@ const GROUPS: { label: string | null; items: Item[] }[] = [
   {
     label: "Commerce Hub",
     items: [
-      { href: "/products", label: "Product Catalog", icon: Package },
-      { href: "/orders", label: "Orders", icon: ShoppingBag },
-      { href: "/pipeline", label: "Studio Pipeline", icon: Kanban },
       { href: "/clients", label: "Clients", icon: Users, also: ["/billing"] },
     ],
   },
   {
     label: "Automations",
     items: [
-      { href: "/tools/cleanup", label: "Image Clean-up", icon: Eraser },
-      { href: "/tools/shots", label: "Image Angles", icon: Camera },
       { href: "/tools/listing", label: "Listing Automation", icon: FileSpreadsheet, also: ["/tools/jobs"] },
-      { href: "/automations", label: "Workflow Engine", icon: Workflow, also: ["/tasks"] },
     ],
   },
   {
     label: "Growth",
     items: [
-      { href: "/keywords", label: "Keywords & Ranks", icon: TrendingUp },
-      { href: "/ads", label: "Advertising", icon: Megaphone },
-      { href: "/inventory", label: "Inventory", icon: Boxes },
-      { href: "/reviews", label: "Reviews & Health", icon: Star },
     ],
   },
   {
