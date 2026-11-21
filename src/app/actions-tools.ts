@@ -339,7 +339,11 @@ made = await generateJobItem(provider, brief, m, job.tone, known, unknown, corre
   } catch (e) {
     const message = e instanceof Error ? e.message.slice(0, 500) : "AI request failed";
     await writeItem(jobId, index, { source: s, status: "failed", error: message });
-    const quota = /429|rate.?limit|quota|tokens per (minute|day)|tpm|tpd|too many requests/i.test(message);
+    // For combined provider failures, classify the final provider response.
+    // OpenRouter may be out of quota while Groq returns a recoverable 400 JSON
+    // validation error; that must fail only this row, not pause the whole batch.
+    const providerFailure = message.split(" | ").at(-1) ?? message;
+    const quota = /429|rate.?limit|quota|tokens per (minute|day)|tpm|tpd|too many requests/i.test(providerFailure);
     return { ok: false, pause: quota };
   }
 }
