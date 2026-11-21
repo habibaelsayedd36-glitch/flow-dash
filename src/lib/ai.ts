@@ -518,7 +518,10 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
       // OpenRouter's free-models-per-day quota is shared across free model IDs.
       // Trying more models cannot bypass it and only creates needless 429 calls.
       if (/free-models-per-day|free model requests per day|daily free model limit/i.test(message)) {
-        throw new Error("OpenRouter's shared free-model daily limit has been reached. FLOW stopped without trying more models or using a paid model. Wait for OpenRouter's daily reset, or connect another provider with an available free quota in Settings.");
+        // This quota is shared across OpenRouter free models. Stop OpenRouter attempts,
+        // but continue to the independent Groq fallback below.
+        lastError = error;
+        break;
       }
       const canTryAnotherFreeModel =
         ["(402):", "(404):", "(429):", "(502):", "(503):", "(504):"].some((status) => message.includes(status)) ||
