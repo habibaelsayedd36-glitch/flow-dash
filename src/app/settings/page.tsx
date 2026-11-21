@@ -35,7 +35,8 @@ export default async function SettingsPage() {
             providers={(Object.keys(PROVIDERS) as ProviderId[]).map((id) => ({ id, label: PROVIDERS[id].label, defaultModel: PROVIDERS[id].defaultModel }))}
             current={provider ? { id: provider.id, label: provider.label, model: provider.model, masked: maskKey(provider.key), source: provider.source } : null}
             visionMasked={visionKey ? maskKey(visionKey) : ""}
-            fallbackMasked={fallbackKey ? maskKey(fallbackKey) : ""}\n            groqFallbackMasked={groqFallbackKey ? maskKey(groqFallbackKey) : ""}
+            fallbackMasked={fallbackKey ? maskKey(fallbackKey) : ""}
+            groqFallbackMasked={groqFallbackKey ? maskKey(groqFallbackKey) : ""}
             pixelAiMasked={pixelAiKey ? maskKey(pixelAiKey) : ""}
             cloudflareAccountId={fluxConfig.accountId}
             cloudflareTokenMasked={fluxConfig.token ? maskKey(fluxConfig.token) : ""}
