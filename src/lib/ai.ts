@@ -475,7 +475,7 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
       // with "Failed to generate JSON". Retry once in ordinary text mode;
       // the system prompt still requires a single valid JSON object, and the
       // listing parser/repair step validates the result before saving it.
-      if (!json || !/failed to generate json|json mode|response_format/i.test(message)) throw error;
+      if (!json || !/failed to (?:generate|validate) json|json mode|response_format/i.test(message)) throw error;
       data = await request(false);
     }
     const content = data?.choices?.[0]?.message?.content;
