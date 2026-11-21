@@ -619,7 +619,7 @@ async function repairShortBullets(
       fit(content.bulletsEn[i] ?? "", enFallback[i % enFallback.length] ?? brief.name, enSuffix)
     ),
     bulletsAr: Array.from({ length: RULES[m].bullets }, (_, i) =>
-      fit(content.bulletsAr[i] ?? "", arFallback[i % arFallback.length] ?? brief.nameAr || brief.name, arSuffix)
+      fit(content.bulletsAr[i] ?? "", arFallback[i % arFallback.length] ?? (brief.nameAr || brief.name), arSuffix)
     ),
   };
   if (hasShortBullets(repaired, m)) {
