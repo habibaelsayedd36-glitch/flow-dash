@@ -1,7 +1,7 @@
 import { AlertTriangle, CheckCircle2, ShieldCheck } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { and, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { ensureDb } from "@/db/ensure";
 import { clients, listings, products } from "@/db/schema";
