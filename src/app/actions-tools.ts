@@ -63,7 +63,9 @@ export async function saveAiKeyAction(_prev: KeyState, fd: FormData): Promise<Ke
   if (key) await setSetting("ai_key", key);
   const freeModel = provider === "gemini"
     ? "gemini-3.5-flash-lite"
-    : model.endsWith(":free") || model === "openrouter/free" ? model : "baidu/ernie-5.5-flash-preview:free";
+    : provider === "groq"
+      ? "openai/gpt-oss-20b"
+      : model.endsWith(":free") || model === "openrouter/free" ? model : "baidu/ernie-5.5-flash-preview:free";
   await setSetting("ai_model", freeModel);
   refresh();
   return { ok: true };
@@ -78,6 +80,19 @@ export async function saveOpenRouterFallbackKeyAction(_prev: KeyState, fd: FormD
   }
   if (!key) return { error: "Paste your OpenRouter API key first." };
   await setSetting("openrouter_fallback_key", key);
+  refresh();
+  return { ok: true };
+}
+
+export async function saveGroqFallbackKeyAction(_prev: KeyState, fd: FormData): Promise<KeyState> {
+  await requireUser();
+  await ensureDb();
+  const key = String(fd.get("groqFallbackKey") ?? "").trim();
+  if (key && (key.length < 16 || key.length > 500 || /\\s/.test(key))) {
+    return { error: "That does not look like a valid Groq API key." };
+  }
+  if (!key) return { error: "Paste your Groq API key first." };
+  await setSetting("groq_fallback_key", key);
   refresh();
   return { ok: true };
 }
