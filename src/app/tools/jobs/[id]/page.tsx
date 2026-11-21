@@ -40,6 +40,7 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
         clientName={clientName}
         imported={job.imported}
         status={job.status}
+        hasTemplate={Boolean(job.template?.length)}
         items={job.items.map((item, index) => ({
           index,
           sku: item.source.sku ?? "",
