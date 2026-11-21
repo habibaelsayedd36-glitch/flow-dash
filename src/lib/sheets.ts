@@ -91,7 +91,7 @@ export async function buildCollectingSheet(job: Job): Promise<ArrayBuffer> {
     "Title (EN)", "Title (AR)",
     ...[1, 2, 3, 4, 5].map((n) => `Bullet ${n} (EN)`),
     ...[1, 2, 3, 4, 5].map((n) => `Bullet ${n} (AR)`),
-    "Description (EN)", "Description (AR)", "Search terms",
+    "Description (EN)", "Description (AR)", "5 Keywords (EN + AR)",
     ...SPEC_COLS.map(([, label]) => label),
     "Compliance score", "Written by", "FLAGS — check before publishing",
   ];
