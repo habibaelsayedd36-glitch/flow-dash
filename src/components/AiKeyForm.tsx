@@ -2,16 +2,16 @@
 
 import { Check, KeyRound, Loader2, PlugZap, Trash2, X } from "lucide-react";
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
-import { removeAiKeyAction, saveAiKeyAction, saveOpenRouterVisionKeyAction, saveOpenRouterFallbackKeyAction, savePixelAiKeyAction, saveCloudflareFluxKeyAction, testAiAction, type KeyState } from "@/app/actions-tools";
+import { removeAiKeyAction, saveAiKeyAction, saveOpenRouterVisionKeyAction, saveOpenRouterFallbackKeyAction, saveGroqFallbackKeyAction, savePixelAiKeyAction, saveCloudflareFluxKeyAction, testAiAction, type KeyState } from "@/app/actions-tools";
 
 type ProviderOpt = { id: string; label: string; defaultModel: string };
 type Current = { id: string; label: string; model: string; masked: string; source: "env" | "settings" } | null;
 
-export function AiKeyForm({ providers, current, visionMasked, fallbackMasked, pixelAiMasked, cloudflareAccountId = "", cloudflareTokenMasked = "" }: { providers: ProviderOpt[]; current: Current; visionMasked: string; fallbackMasked: string; pixelAiMasked: string; cloudflareAccountId?: string; cloudflareTokenMasked?: string }) {
+export function AiKeyForm({ providers, current, visionMasked, fallbackMasked, groqFallbackMasked, pixelAiMasked, cloudflareAccountId = "", cloudflareTokenMasked = "" }: { providers: ProviderOpt[]; current: Current; visionMasked: string; fallbackMasked: string; groqFallbackMasked: string; pixelAiMasked: string; cloudflareAccountId?: string; cloudflareTokenMasked?: string }) {
   const [provider, setProvider] = useState(current?.id ?? providers[0].id);
   const [state, action, saving] = useActionState<KeyState, FormData>(saveAiKeyAction, {});
   const [fluxState, fluxAction, savingFlux] = useActionState<{ ok?: boolean; error?: string }, FormData>(saveCloudflareFluxKeyAction, {});
-  const [fallbackState, fallbackAction, savingFallback] = useActionState<KeyState, FormData>(saveOpenRouterFallbackKeyAction, {});
+  const [fallbackState, fallbackAction, savingFallback] = useActionState<KeyState, FormData>(saveOpenRouterFallbackKeyAction, {});\n  const [groqState, groqAction, savingGroq] = useActionState<KeyState, FormData>(saveGroqFallbackKeyAction, {});
   const [test, setTest] = useState<{ ok: boolean; message: string } | null>(null);
   const [testing, setTesting] = useState(false);
   const [removing, startRemove] = useTransition();
@@ -20,7 +20,9 @@ export function AiKeyForm({ providers, current, visionMasked, fallbackMasked, pi
   const selected = providers.find((p) => p.id === provider) ?? providers[0];
   const providerHelp = selected.id === "gemini"
     ? "Uses Google Gemini 3.5 Flash-Lite for listing text. FLOW does not switch to paid Gemini models."
-    : "Uses OpenRouter free models only. Paid models are rejected and never used as fallbacks.";
+    : selected.id === "groq"
+      ? "Uses Groq hosted free-tier models only. Rate limits still apply."
+      : "Uses OpenRouter free models only. Paid models are rejected and never used as fallbacks.";
 
   useEffect(() => {
     if (state.ok && keyRef.current) keyRef.current.value = "";
@@ -118,6 +120,20 @@ export function AiKeyForm({ providers, current, visionMasked, fallbackMasked, pi
         </form>
         {fallbackState.error && <p role="alert" className="mt-1.5 text-[13px] text-danger">{fallbackState.error}</p>}
         {fallbackState.ok && <p role="status" className="mt-1.5 text-[13px] text-forest">OpenRouter fallback key saved. Gemini remains your primary provider.</p>}
+      </div>
+
+      <div className="mt-5 border-t border-line pt-5">
+        <h3 className="text-sm font-semibold text-ink">Groq Free · Independent AI fallback</h3>
+        <p className="mt-1 text-[13px] leading-relaxed text-mute">
+          Separate from Gemini and OpenRouter. If both are unavailable or have exhausted their free quotas, FLOW can try Groq's free API tier. Groq has its own limits, so this adds another independent allowance rather than unlimited generation.
+          {groqFallbackMasked ? <> Saved key: <span className="num text-ink">{groqFallbackMasked}</span>.</> : " No Groq fallback key saved yet."}
+        </p>
+        <form action={groqAction} className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <input name="groqFallbackKey" type="password" className="field min-w-0 flex-1" placeholder={groqFallbackMasked ? "Paste a new key to replace it" : "Paste Groq API key"} autoComplete="off" spellCheck={false} />
+          <button type="submit" className="btn btn-secondary" disabled={savingGroq}>{savingGroq ? <Loader2 size={15} className="animate-spin" aria-hidden /> : <KeyRound size={15} aria-hidden />}Save Groq fallback</button>
+        </form>
+        {groqState.error && <p role="alert" className="mt-1.5 text-[13px] text-danger">{groqState.error}</p>}
+        {groqState.ok && <p role="status" className="mt-1.5 text-[13px] text-forest">Groq fallback key saved. FLOW will try it only after OpenRouter's free route is unavailable.</p>}
       </div>
 
       <div className="mt-5 border-t border-line pt-5">
