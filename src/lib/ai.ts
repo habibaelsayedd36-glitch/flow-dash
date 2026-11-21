@@ -474,6 +474,11 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
     } catch (error) {
       lastError = error;
       const message = error instanceof Error ? error.message : String(error);
+      // OpenRouter's free-models-per-day quota is shared across free model IDs.
+      // Trying more models cannot bypass it and only creates needless 429 calls.
+      if (/free-models-per-day|free model requests per day|daily free model limit/i.test(message)) {
+        throw new Error("OpenRouter's shared free-model daily limit has been reached. FLOW stopped without trying more models or using a paid model. Wait for OpenRouter's daily reset, or connect another provider with an available free quota in Settings.");
+      }
       const canTryAnotherFreeModel =
         ["(402):", "(404):", "(429):", "(502):", "(503):", "(504):"].some((status) => message.includes(status)) ||
         /no endpoints available|model is unavailable|provider is unavailable|rate.?limit|quota exceeded|temporarily unavailable/i.test(message);
