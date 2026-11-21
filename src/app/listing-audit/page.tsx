@@ -68,6 +68,9 @@ export default async function ListingAuditPage() {
     if (marketplace === "amazon" && !listing.searchTerms.trim()) {
       issues.push({ id: "search_terms_empty", label: ISSUE_LABELS.search_terms_empty, severity: "error", detail: "0 keywords" });
     }
+    if (!product.keywords.trim() && !listing.searchTerms.trim() && marketplace !== "amazon") {
+      issues.push({ id: "keyword_brief_missing", label: ISSUE_LABELS.keyword_brief_missing, severity: "warn", detail: "No target keywords were supplied for this product." });
+    }
     const errors = issues.filter((issue) => issue.severity === "error").length;
     const warnings = issues.length - errors;
     const score = Math.max(0, scoreOf(checks) - (marketplace === "amazon" && !listing.searchTerms.trim() ? 8 : 0));
