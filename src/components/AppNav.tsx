@@ -8,6 +8,8 @@ import {
   LayoutDashboard,
   Menu,
   Settings,
+  ShieldCheck,
+  FileUp,
   Users,
   X,
   type LucideIcon,
@@ -41,14 +43,21 @@ const GROUPS: { label: string | null; items: Item[] }[] = [
     ],
   },
   {
-    label: "Automations",
+    label: "Quality",
     items: [
-      { href: "/tools/listing", label: "Listing Automation", icon: FileSpreadsheet, also: ["/tools/jobs"] },
+      { href: "/listing-audit", label: "Listing Audit", icon: ShieldCheck },
     ],
   },
   {
-    label: "Growth",
+    label: "Files",
     items: [
+      { href: "/import-export", label: "Import & Export Center", icon: FileUp },
+    ],
+  },
+  {
+    label: "Automations",
+    items: [
+      { href: "/tools/listing", label: "Listing Automation", icon: FileSpreadsheet, also: ["/tools/jobs"] },
     ],
   },
   {
