@@ -141,6 +141,39 @@ export async function buildCollectingSheet(job: Job): Promise<ArrayBuffer> {
   return (await wb.xlsx.writeBuffer()) as ArrayBuffer;
 }
 
+
+/** CSV export of the collecting sheet for spreadsheet tools and hand-off. */
+export function buildCollectingCsv(job: Job): string {
+  const head = [
+    "SKU", "Product (from sheet)", "Brand", "Barcode", "Qty", "Price",
+    "Title (EN)", "Title (AR)",
+    ...[1, 2, 3, 4, 5].map((n) => `Bullet ${n} (EN)`),
+    ...[1, 2, 3, 4, 5].map((n) => `Bullet ${n} (AR)`),
+    "Description (EN)", "Description (AR)", "5 Keywords (EN + AR)",
+    ...SPEC_COLS.map(([, label]) => label),
+    "Compliance score", "Written by", "FLAGS — check before publishing",
+  ];
+  const quote = (value: unknown) => {
+    const raw = String(value ?? "");
+    return /[",\\r\\n]/.test(raw) ? `"${raw.replace(/"/g, '""')}"` : raw;
+  };
+  const rows = [head];
+  for (const item of job.items) {
+    const c = item.content;
+    const b = (arr: string[] | undefined) => [0, 1, 2, 3, 4].map((i) => arr?.[i] ?? "");
+    rows.push([
+      item.source.sku ?? "", item.source.name || item.source.nameAr || "", item.source.brand?.trim() || "Generic", item.source.barcode ?? "",
+      item.source.quantity ?? "", item.source.price ?? "",
+      c?.titleEn ?? "", c?.titleAr ?? "", ...b(c?.bulletsEn), ...b(c?.bulletsAr),
+      c?.descriptionEn ?? "", c?.descriptionAr ?? "", c?.searchTerms ?? "",
+      ...SPEC_COLS.map(([key]) => item.specs?.[key] ?? ""),
+      item.score ?? "", item.status === "failed" ? `FAILED: ${item.error ?? ""}` : item.engine === "ai" ? "AI" : "Template engine",
+      flagSummary(item).join(" · "),
+    ]);
+  }
+  return "\\uFEFF" + rows.map((row) => row.map(quote).join(",")).join("\\r\\n") + "\\r\\n";
+}
+
 // ---------------------------------------------------------------------------
 // Amazon flat file (tab-delimited). Uses the seller's own template header when
 // one was uploaded; otherwise the common flat-file attribute names.
