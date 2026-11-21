@@ -28,7 +28,9 @@ export function JobRunner({ jobId, items, hasClient, clientName, imported, statu
   const [includeEstimates, setIncludeEstimates] = useState(false);
   const [busy, setBusy] = useState<"" | "import" | "autofix" | number>("");
   const [notice, setNotice] = useState("");
-  const [workerError, setWorkerError] = useState("");\n  const [templateBusy, setTemplateBusy] = useState(false);\n  const [templateNotice, setTemplateNotice] = useState("");
+  const [workerError, setWorkerError] = useState("");
+  const [templateBusy, setTemplateBusy] = useState(false);
+  const [templateNotice, setTemplateNotice] = useState("");
   const started = useRef(false);
   const pauseRequested = useRef(false);
   const [pausing, setPausing] = useState(false);
@@ -197,7 +199,11 @@ export function JobRunner({ jobId, items, hasClient, clientName, imported, statu
             <FileSpreadsheet size={16} aria-hidden />
             Collecting sheet (.xlsx)
           </a>
-          <a href={`/api/jobs/${jobId}/download?file=csv`} className="btn btn-ghost">\n            <Download size={16} aria-hidden />\n            Collecting sheet (.csv)\n          </a>\n          <a href={flat("en")} className="btn btn-ghost">
+          <a href={`/api/jobs/${jobId}/download?file=csv`} className="btn btn-ghost">
+            <Download size={16} aria-hidden />
+            Collecting sheet (.csv)
+          </a>
+          <a href={flat("en")} className="btn btn-ghost">
             <Download size={16} aria-hidden />
             Amazon flat file · English
           </a>
