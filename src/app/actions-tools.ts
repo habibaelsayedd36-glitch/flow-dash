@@ -163,7 +163,6 @@ export async function startListingJobAction(
     .where(eq(products.clientId, client.id));
   const merchantCode = skuCode(client.name, "MER") + String(client.id).padStart(3, "0");
   const items: JobItem[] = [];
-  const missingBrandRows: number[] = [];
   const skuByProduct = new Map<string, string>();
   const nextSequence = new Map<string, number>();
 
@@ -172,12 +171,12 @@ export async function startListingJobAction(
     const prefix = `${merchantCode}-${brandCode}-`;
     const match = product.sku.match(new RegExp("^" + prefix + "(\\d+)$", "i"));
     if (match) nextSequence.set(prefix, Math.max(nextSequence.get(prefix) ?? 1, Number(match[1]) + 1));
-    if (product.sku && product.name && product.brand) {
-      skuByProduct.set(`${skuIdentity(product.brand)}::${skuIdentity(product.name)}`, product.sku);
+    if (product.sku && product.name) {
+      skuByProduct.set(`${skuIdentity(product.brand || "__generic__")}::${skuIdentity(product.name)}`, product.sku);
     }
   }
 
-  for (const [rowIndex, row] of job.raw.slice(1).entries()) {
+  for (const row of job.raw.slice(1)) {
     const source: Record<string, string> = {};
     const mappedFields = ["sku", "name", "brand", "barcode", "quantity", "price", "color", "size", "material", "weight", "dimensions", "origin", "features", "featuresAr", "keywords"] as const;
     for (const key of mappedFields) {
@@ -205,11 +204,7 @@ export async function startListingJobAction(
     }
     items.push({ source, status: "pending" });
   }
-  if (missingBrandRows.length) {
-    const examples = missingBrandRows.slice(0, 8).join(", ");
-    return { ok: false, error: `Add a brand for every product. Missing in spreadsheet row(s): ${examples}${missingBrandRows.length > 8 ? ", …" : ""}.` };
-  }
-  if (items.length === 0) return { ok: false, error: "No complete Product Name + Brand rows found. Check the two columns." };
+  if (items.length === 0) return { ok: false, error: "No product rows with a Product Name were found. Check the mapped Product Name column." };
 
   await db
     .update(jobs)
