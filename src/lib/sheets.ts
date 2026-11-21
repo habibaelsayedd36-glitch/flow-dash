@@ -108,7 +108,7 @@ export async function buildCollectingSheet(job: Job): Promise<ArrayBuffer> {
     const c = item.content;
     const b = (arr: string[] | undefined) => [0, 1, 2, 3, 4].map((i) => arr?.[i] ?? "");
     const row = ws.addRow([
-      item.source.sku ?? "", item.source.name || item.source.nameAr || "", item.source.brand ?? "", item.source.barcode ?? "",
+      item.source.sku ?? "", item.source.name || item.source.nameAr || "", item.source.brand?.trim() || "Generic", item.source.barcode ?? "",
       item.source.quantity ?? "", item.source.price ?? "",
       c?.titleEn ?? "", c?.titleAr ?? "", ...b(c?.bulletsEn), ...b(c?.bulletsAr),
       c?.descriptionEn ?? "", c?.descriptionAr ?? "", c?.searchTerms ?? "",
@@ -173,10 +173,12 @@ function valuesFor(item: JobItem, job: Job, lang: "en" | "ar", includeEstimates:
   const bullets = (ar ? c?.bulletsAr : c?.bulletsEn) ?? [];
   const barcode = (item.source.barcode ?? "").replace(/\D/g, "");
   const [weight, unit] = weightParts(spec("weight"));
+  // Amazon requires the literal Generic brand value for products with no brand.
+  const brandName = item.source.brand?.trim() || "Generic";
   const out: Record<string, string> = {
     feed_product_type: job.productType,
     item_sku: item.source.sku ?? "",
-    brand_name: item.source.brand ?? "",
+    brand_name: brandName,
     item_name: (ar ? c?.titleAr : c?.titleEn) ?? "",
     external_product_id: barcode,
     external_product_id_type: barcode.length === 12 ? "UPC" : barcode.length === 13 ? "EAN" : barcode.length === 14 ? "GTIN" : "",
