@@ -156,7 +156,7 @@ export async function startListingJobAction(
   const client = input.clientId ? (await db.select().from(clients).where(eq(clients.id, input.clientId)))[0] : undefined;
   if (!client) return { ok: false, error: "Choose a valid merchant before generating SKUs." };
 
-  // Reuse existing SKUs for this merchant and continue each brand's sequence.
+  // Reuse existing SKUs for this merchant; unbranded products use a separate GEN namespace.
   const existingProducts = await db
     .select({ name: products.name, brand: products.brand, sku: products.sku })
     .from(products)
@@ -168,7 +168,7 @@ export async function startListingJobAction(
   const nextSequence = new Map<string, number>();
 
   for (const product of existingProducts) {
-    const brandCode = skuCode(product.brand || "", "BRAND");
+    const brandCode = product.brand?.trim() ? skuCode(product.brand, "BRAND") : "GEN";
     const prefix = `${merchantCode}-${brandCode}-`;
     const match = product.sku.match(new RegExp("^" + prefix + "(\\d+)$", "i"));
     if (match) nextSequence.set(prefix, Math.max(nextSequence.get(prefix) ?? 1, Number(match[1]) + 1));
@@ -186,19 +186,16 @@ export async function startListingJobAction(
       if (value) source[key] = value;
     }
     if (!source.name) continue;
-    if (!source.brand) {
-      missingBrandRows.push(rowIndex + 2);
-      continue;
-    }
-
+    // Blank brand is valid: treat it as a generic / unbranded product.
     // Keep seller SKUs; otherwise reuse a prior product SKU or allocate one.
     if (!source.sku) {
-      const productKey = `${skuIdentity(source.brand)}::${skuIdentity(source.name)}`;
+      const brandIdentity = source.brand || "__generic__";
+      const productKey = `${skuIdentity(brandIdentity)}::${skuIdentity(source.name)}`;
       const priorSku = skuByProduct.get(productKey);
       if (priorSku) {
         source.sku = priorSku;
       } else {
-        const brandCode = skuCode(source.brand, "BRAND");
+        const brandCode = source.brand ? skuCode(source.brand, "BRAND") : "GEN";
         const prefix = `${merchantCode}-${brandCode}-`;
         const sequence = nextSequence.get(prefix) ?? 1;
         source.sku = `${prefix}${String(sequence).padStart(4, "0")}`;
