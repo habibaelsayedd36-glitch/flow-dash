@@ -21,7 +21,18 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   const [job] = await db.select().from(jobs).where(eq(jobs.id, Number(id) || 0));
   if (!job || job.type !== "listing") return Response.json({ ok: false, error: "Job not found" }, { status: 404 });
 
-  if (url.searchParams.get("file") === "csv") {\n    const body = buildCollectingCsv(job);\n    return new Response(body, {\n      headers: {\n        "content-type": "text/csv; charset=utf-8",\n        "content-disposition": `attachment; filename="collecting-sheet-job${job.id}.csv"`,\n        "cache-control": "no-store",\n      },\n    });\n  }\n\n  if (url.searchParams.get("file") === "flat") {
+  if (url.searchParams.get("file") === "csv") {
+    const body = buildCollectingCsv(job);
+    return new Response(body, {
+      headers: {
+        "content-type": "text/csv; charset=utf-8",
+        "content-disposition": `attachment; filename="collecting-sheet-job${job.id}.csv"`,
+        "cache-control": "no-store",
+      },
+    });
+  }
+
+  if (url.searchParams.get("file") === "flat") {
     const lang = url.searchParams.get("lang") === "ar" ? "ar" : "en";
     const body = buildFlatFile(job, lang, url.searchParams.get("estimates") === "1");
     return new Response(body, {
