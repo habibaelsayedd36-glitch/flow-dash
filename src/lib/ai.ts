@@ -428,8 +428,18 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
           source: process.env.OPENROUTER_API_KEY ? "env" : "settings",
         }, system, user, json);
       }
+      const groqKey = await getGroqFallbackKey();
+      if (groqKey) {
+        return callModel({
+          id: "groq",
+          label: PROVIDERS.groq.label,
+          model: PROVIDERS.groq.defaultModel,
+          key: groqKey,
+          source: "settings",
+        }, system, user, json);
+      }
       throw new Error(
-        `Google Gemini free daily quota is exhausted. FLOW did not use a paid model. Add an OpenRouter free API key in Settings to enable automatic free-model fallback, or wait for Gemini quota reset. ${lastError?.message || ""}`,
+        `Google Gemini free daily quota is exhausted. FLOW did not use a paid model. Connect an OpenRouter or Groq free API key in Settings to enable automatic fallback, or wait for Gemini quota reset. ${lastError?.message || ""}`,
       );
     }
 
