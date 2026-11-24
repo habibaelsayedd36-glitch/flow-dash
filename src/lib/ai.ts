@@ -299,7 +299,7 @@ function retryDelayMs(res: Response, data: unknown, attempt: number): number {
 async function post(url: string, headers: Record<string, string>, body: unknown, who: string): Promise<unknown> {
   const retryable = new Set([429, 500, 502, 503, 504]);
   let lastError: unknown;
-  for (let attempt = 0; attempt < 1; attempt++) {
+  for (let attempt = 0; attempt < 3; attempt++) {
     let res: Response;
     try {
       res = await fetch(url, {
@@ -345,7 +345,7 @@ async function callModel(p: AiProvider, system: string, user: string, json: bool
     let lastError: Error | null = null;
 
     for (const model of models) {
-      for (let attempt = 0; attempt < 1; attempt++) {
+      for (let attempt = 0; attempt < 3; attempt++) {
         let response: Response;
         try {
           response = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
